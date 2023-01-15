@@ -39,6 +39,7 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
             case "Character": CharacterOnSetup(obj.Addon); break;
             case "PvPCharacter": PvpCharacterOnSetup(obj.Addon); break;
             case "CharacterInspect": InspectOnSetup(obj.Addon); break;
+            case "ArmouryBoard": ArmouryBoardOnSetup(obj.Addon); break;
         }
     }
 
@@ -406,6 +407,28 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
         MoveNode(atkUnitBase, 91, 18, 227); // Hands
         MoveNode(atkUnitBase, 90, 18, 274); // Legs
         MoveNode(atkUnitBase, 92, 18, 321); // Feet
+    }
+
+    private void ArmouryBoardOnSetup(AtkUnitBase* atkUnitBase)
+    {
+        // Left Icons
+        MoveNode(atkUnitBase, 7, 0, 46);
+        MoveNode(atkUnitBase, 8, 0, 92);
+        MoveNode(atkUnitBase, 9, 0,136);
+        MoveNode(atkUnitBase,10, 0,182);
+        MoveNode(atkUnitBase,11, 0,228);
+        MoveNode(atkUnitBase,12, 0,274);
+
+        // Soul Stone Icon
+        MoveNode(atkUnitBase,18, 0,  0);
+
+        var SoulStoneComponent = atkUnitBase->GetNodeById(18)->GetComponent();
+        
+        // Recenter Icon
+        MoveNode(SoulStoneComponent, 4, 14, 5);
+        
+        // Align text to the left
+        MoveNode(SoulStoneComponent, 2, 8, 31);
     }
 
     private void MoveNode(AtkComponentBase* componentBase, uint nodeId, float x, float y) {
