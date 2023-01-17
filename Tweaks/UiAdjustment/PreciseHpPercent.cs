@@ -89,6 +89,8 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment
         };
 
         private const string TargetInfoOnRequestedUpdate = "40 55 57 41 56 48 83 EC 40 48 8B 6A 48 48 8B F9 4D 8B 70 40 48 85 ED 0F 84 ?? ?? ?? ?? 4D 85 F6 0F 84 ?? ?? ?? ?? 48 8B 45 20 48 89 74 24 ?? 4C 89 7C 24 ?? 44 0F B6 B9 ?? ?? ?? ?? 83 38 00 8B 70 08 0F 95 C0";
+        private const string TargetInfoMainTargetOnRequestedUpdate = "40 55 57 41 56 48 83 EC 40 48 8B 6A 48 48 8B F9 4D 8B 70 40 48 85 ED 0F 84 ?? ?? ?? ?? 4D 85 F6 0F 84 ?? ?? ?? ?? 48 8B 45 20 48 89 74 24 ?? 4C 89 7C 24 ?? 44 0F B6 B9 ?? ?? ?? ?? 83 38 00 8B 70 08 0F 94 C0 ";
+        private const string FocusTargetInfoOnRequestedUpdate = "40 53 41 54 41 56 41 57 48 83 EC 78";
 
         public Configs Config { get; private set; }
 
@@ -103,12 +105,19 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment
         const float SingleNumberOffset = 9f;
 
         public HookWrapper<Common.AddonOnUpdate> TargetInfoUpdateHook;
+        public HookWrapper<Common.AddonOnUpdate> TargetInfoMainTargetUpdateHook;
+        public HookWrapper<Common.AddonOnUpdate> FocusTargetInfoUpdateHook;
 
         public override void Enable()
         {
             Config = LoadConfig<Configs>() ?? new Configs();
             TargetInfoUpdateHook = Common.HookAfterAddonUpdate(TargetInfoOnRequestedUpdate, TargetInfoUpdate);
+            TargetInfoMainTargetUpdateHook = Common.HookAfterAddonUpdate(TargetInfoMainTargetOnRequestedUpdate, TargetInfoMainTargetUpdate);
+            FocusTargetInfoUpdateHook = Common.HookAfterAddonUpdate(FocusTargetInfoOnRequestedUpdate, FocusTargetInfoUpdate);
+            //FocusTargetInfoUpdateHook = Common.HookAfterAddonUpdate(FocusTargetInfoOnRequestedUpdate, FocusTargetUpdate);
             TargetInfoUpdateHook.Enable();
+            TargetInfoMainTargetUpdateHook.Enable();
+            FocusTargetInfoUpdateHook.Enable();
             TargetInfoUpdate((AtkUnitBase*)Service.GameGui.GetAddonByName("_TargetInfo", 1), null, null);
             base.Enable();
         }
@@ -117,6 +126,8 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment
         {
             SaveConfig(Config);
             TargetInfoUpdateHook.Disable();
+            TargetInfoMainTargetUpdateHook.Disable();
+            FocusTargetInfoUpdateHook.Disable();
             PluginConfig.UiAdjustments.PreciseHpPercent = null;
             ResetTargetInfo();
             base.Disable();
@@ -144,18 +155,47 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment
             pHpNode->SetText(OriginalTargetInfoPercentString);
             tNameNode->SetPositionFloat(OriginalTargetNamePosX, tNameNode->Y);
         }
+        
+        private void FocusTargetInfoUpdate(AtkUnitBase* atkUnitBase, NumberArrayData** numberArrayData, StringArrayData** stringArrayData)
+        {
+            if (atkUnitBase == null || Service.Targets.FocusTarget == null) return;
+            var targetInfoNode = atkUnitBase->UldManager.NodeList[10]->GetAsAtkTextNode();
+            var bnpc = (BattleNpc)Service.Targets.FocusTarget;
+            if (bnpc.CurrentHp == bnpc.MaxHp)
+                return;
+
+            var HpPercent = FormatHp(
+                (float)Math.Round(
+                    bnpc.CurrentHp / (float)bnpc.MaxHp * 100,
+                    Config.DecimalPrecision,
+                    (MidpointRounding)Config.roundingMethod
+                ));
+            var targetName = targetInfoNode->NodeText.GetString().Split('%')[1];
+            
+            targetInfoNode->SetText(HpPercent + targetName);
+        }
+
+        private void TargetInfoMainTargetUpdate(AtkUnitBase* atkUnitBase, NumberArrayData** numberArrayData, StringArrayData** stringArrayData)
+        {
+            if (atkUnitBase == null) return;
+            TargetInfoModifyHp(atkUnitBase, 8, 7);
+        }
 
         private void TargetInfoUpdate(AtkUnitBase* atkUnitBase, NumberArrayData** numberArrayData, StringArrayData** stringArrayData)
         {
             if (atkUnitBase == null) return;
+            TargetInfoModifyHp(atkUnitBase, 39, 38);
+        }
 
-            var HpPercentNode = atkUnitBase->UldManager.NodeList[38]->GetAsAtkTextNode();
-            var NameNode = atkUnitBase->UldManager.NodeList[39];
+        private void TargetInfoModifyHp(AtkUnitBase* atkUnitBase, int NameNodeIndex, int HpPercentNodeIndex)
+        {
+            var HpPercentNode = atkUnitBase->UldManager.NodeList[HpPercentNodeIndex]->GetAsAtkTextNode();
+            var NameNode = atkUnitBase->UldManager.NodeList[NameNodeIndex];
 
             var target = Service.Targets.Target;
             if (target == null || target.ObjectKind != Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
                 return;
-
+            
             OriginalTargetNamePosX = NameNode->X;
             OriginalTargetInfoPercentString = HpPercentNode->NodeText.GetString();
 
