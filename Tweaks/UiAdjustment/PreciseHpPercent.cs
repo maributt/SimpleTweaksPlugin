@@ -65,7 +65,6 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment
             {
                 foreach (var v in (RoundingMethod[])Enum.GetValues(typeof(RoundingMethod)))
                 {
-                    PluginLog.LogDebug(v.GetDescription());
                     if (!ImGui.Selectable($"{v.GetDescription()} ({exampleValue} → {Math.Round(exampleValue, 2, (MidpointRounding)v)})##hpRoundingMethodSelect{v.GetDescription()}", Config.roundingMethod == v)) continue;
                     Config.roundingMethod = v;
                     hasChanged = true;
