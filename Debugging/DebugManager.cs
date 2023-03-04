@@ -11,8 +11,11 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using Dalamud;
 using FFXIVClientStructs.Attributes;
 using FFXIVClientStructs.FFXIV.Client.System.String;
+using FFXIVClientStructs.Interop;
+using FFXIVClientStructs.Interop.Attributes;
 using Lumina.Excel;
 using SimpleTweaksPlugin.Debugging;
 using SimpleTweaksPlugin.TweakSystem;
@@ -21,11 +24,6 @@ using SimpleTweaksPlugin.Utility;
 namespace SimpleTweaksPlugin {
     public partial class SimpleTweaksPluginConfig {
         public DebugConfig Debugging = new DebugConfig();
-
-        public bool ShouldSerializeDebugging() {
-            return DebugManager.Enabled;
-        }
-
     }
 }
 
@@ -62,8 +60,6 @@ namespace SimpleTweaksPlugin.Debugging {
         private static Dictionary<string, Action> debugPages = new();
 
         private static float sidebarSize = 0;
-
-        public static bool Enabled = false;
 
         public static void RegisterDebugPage(string key, Action action) {
             if (debugPages.ContainsKey(key)) {
@@ -117,7 +113,10 @@ namespace SimpleTweaksPlugin.Debugging {
             _plugin = plugin;
         }
 
-        public static void DrawDebugWindow(ref bool open) {
+        private static Stopwatch initDelay = Stopwatch.StartNew();
+
+        public static void DrawDebugWindow() {
+            if (initDelay.ElapsedMilliseconds < 500) return;
             if (_plugin == null) return;
             if (!_setupDebugHelpers) {
                 _setupDebugHelpers = true;
@@ -135,8 +134,8 @@ namespace SimpleTweaksPlugin.Debugging {
                 } catch (Exception ex) {
                     SimpleLog.Error(ex);
                     _setupDebugHelpers = false;
-                    Enabled = false;
                     DebugHelpers.Clear();
+                    _plugin.DebugWindow.IsOpen = false;
                     return;
                 }
             }
@@ -155,57 +154,49 @@ namespace SimpleTweaksPlugin.Debugging {
                 }
 
             }
-
-            ImGui.SetNextWindowSize(new Vector2(500, 350) * ImGui.GetIO().FontGlobalScale, ImGuiCond.FirstUseEver);
-            ImGui.SetNextWindowSizeConstraints(new Vector2(350, 350) * ImGui.GetIO().FontGlobalScale, new Vector2(2000, 2000) * ImGui.GetIO().FontGlobalScale);
-            ImGui.PushStyleColor(ImGuiCol.WindowBg, 0xFF000000);
-            if (ImGui.Begin($"SimpleTweaksPlugin - Debug [{Assembly.GetExecutingAssembly().GetName().Version}]###stDebugMenu", ref open)) {
-
-                if (ImGui.BeginChild("###debugPages", new Vector2(sidebarSize, -1) * ImGui.GetIO().FontGlobalScale, true)) {
+            
+            if (ImGui.BeginChild("###debugPages", new Vector2(sidebarSize, -1) * ImGui.GetIO().FontGlobalScale, true)) {
 
 
-                    var keys = debugPages.Keys.ToList();
-                    keys.Sort(((s, s1) => {
-                        if (s.StartsWith("[") && !s1.StartsWith("[")) {
-                            return 1;
-                        }
-                        return string.CompareOrdinal(s, s1);
-                    }));
-
-                    foreach (var k in keys) {
-
-                        if (ImGui.Selectable($"{k}##debugPageOption", _plugin.PluginConfig.Debugging.SelectedPage == k)) {
-                            _plugin.PluginConfig.Debugging.SelectedPage = k;
-                            _plugin.PluginConfig.Save();
-                        }
-
+                var keys = debugPages.Keys.ToList();
+                keys.Sort(((s, s1) => {
+                    if (s.StartsWith("[") && !s1.StartsWith("[")) {
+                        return 1;
                     }
+                    return string.CompareOrdinal(s, s1);
+                }));
 
+                foreach (var k in keys) {
+
+                    if (ImGui.Selectable($"{k}##debugPageOption", _plugin.PluginConfig.Debugging.SelectedPage == k)) {
+                        _plugin.PluginConfig.Debugging.SelectedPage = k;
+                        _plugin.PluginConfig.Save();
+                    }
 
                 }
 
-                ImGui.EndChild();
-                ImGui.SameLine();
 
-                if (ImGui.BeginChild("###debugView", new Vector2(-1, -1), true, ImGuiWindowFlags.HorizontalScrollbar)){
-                    if (string.IsNullOrEmpty(_plugin.PluginConfig.Debugging.SelectedPage) || !debugPages.ContainsKey(_plugin.PluginConfig.Debugging.SelectedPage)) {
-                        ImGui.Text("Select Debug Page");
-                    } else {
-                        try {
-                            debugPages[_plugin.PluginConfig.Debugging.SelectedPage]();
-                        } catch (Exception ex) {
-                            SimpleLog.Error(ex);
-                            ImGui.TextColored(new Vector4(1, 0, 0, 1), ex.ToString());
-                        }
-
-                    }
-                }
-
-                ImGui.EndChild();
             }
 
-            ImGui.End();
-            ImGui.PopStyleColor();
+            ImGui.EndChild();
+            ImGui.SameLine();
+
+            if (ImGui.BeginChild("###debugView", new Vector2(-1, -1), true, ImGuiWindowFlags.HorizontalScrollbar)){
+                if (string.IsNullOrEmpty(_plugin.PluginConfig.Debugging.SelectedPage) || !debugPages.ContainsKey(_plugin.PluginConfig.Debugging.SelectedPage)) {
+                    ImGui.Text("Select Debug Page");
+                } else {
+                    try {
+                        debugPages[_plugin.PluginConfig.Debugging.SelectedPage]();
+                    } catch (Exception ex) {
+                        SimpleLog.Error(ex);
+                        ImGui.TextColored(new Vector4(1, 0, 0, 1), ex.ToString());
+                    }
+
+                }
+            }
+
+            ImGui.EndChild();
+
         }
 
         public static void Dispose() {
@@ -320,6 +311,7 @@ namespace SimpleTweaksPlugin.Debugging {
                 var valueParser = member.GetCustomAttribute(typeof(ValueParser));
                 var fixedBuffer = (FixedBufferAttribute) member.GetCustomAttribute(typeof(FixedBufferAttribute));
                 var fixedArray = (FixedArrayAttribute)member.GetCustomAttribute(typeof(FixedArrayAttribute));
+                var fixedSizeArray = member.GetCustomAttribute(typeof(FixedSizeArrayAttribute<>));
                 
                 if (valueParser is ValueParser vp) {
                     vp.ImGuiPrint(type, value, member, addr);
@@ -341,7 +333,7 @@ namespace SimpleTweaksPlugin.Debugging {
 
                         try {
                             var eType = type.GetElementType();
-                            var ptrObj = Marshal.PtrToStructure(new IntPtr(unboxed), eType);
+                            var ptrObj = SafeMemory.PtrToStructure(new IntPtr(unboxed), eType);
                             ImGui.SameLine();
                             PrintOutObject(ptrObj, (ulong) unboxed, new List<string>(path));
                         } catch {
@@ -366,8 +358,45 @@ namespace SimpleTweaksPlugin.Debugging {
 
 
                     } else if (fixedBuffer != null) {
-                        
-                        
+                        if (fixedSizeArray != null) {
+                            var fixedType = fixedSizeArray.GetType().GetGenericArguments()[0];
+                            var size = (int) fixedSizeArray.GetType().GetProperty("Count").GetValue(fixedSizeArray);
+
+                            if (ImGui.TreeNode($"Fixed {ParseTypeName(fixedType)} Array##{member.Name}-{addr}-{string.Join("-", path)}")) {
+                                if ($"{fixedType.Namespace}.{fixedType.Name}" == "FFXIVClientStructs.Interop.Pointer`1") {
+                                    var pointerType = fixedType.GetGenericArguments()[0];
+                                    var arrAddr = (void**)addr;
+                                    if (arrAddr != null) {
+                                        for (var i = 0; i < size; i++) {
+                                            if (arrAddr[i] == null) {
+                                                if (ImGui.GetIO().KeyAlt) ImGui.Text($"[{i}] null");
+                                                continue;
+                                            }
+                                            var arrObj = SafeMemory.PtrToStructure(new IntPtr(arrAddr[i]), pointerType);
+                                            if (arrObj == null) {
+                                                if (ImGui.GetIO().KeyAlt) ImGui.Text($"[{i}] error");
+                                                continue;
+                                            }
+                                            PrintOutObject(arrObj, (ulong)arrAddr[i], new List<string>(path) { $"_arrValue_{i}" }, false, $"[{i}] {arrObj}");
+                                        }
+                                    } else {
+                                        ImGui.Text("Null Pointer");
+                                    }
+                                    
+                                }  else if (fixedType.IsGenericType) {
+                                    ImGui.Text($"Unable to display generic types.");
+                                } else {
+                                    var arrAddr = (IntPtr) addr;
+                                    for (var i = 0; i < size; i++) {
+                                        var arrObj = SafeMemory.PtrToStructure(arrAddr, fixedType);
+                                        PrintOutObject(arrObj, (ulong)arrAddr.ToInt64(), new List<string>(path) { $"_arrValue_{i}" }, false, $"[{i}] {arrObj}");
+                                        arrAddr += Marshal.SizeOf(fixedType);
+                                    }
+                                }
+                                
+                                ImGui.TreePop();
+                            }
+                        } else
                         if (fixedArray != null) {
 
 
@@ -388,11 +417,11 @@ namespace SimpleTweaksPlugin.Debugging {
                                     ImGui.TextDisabled("null");
                                 }
                             } else {
-                                if (ImGui.TreeNode($"Fixed {fixedArray.Type.Name} Array##{member.Name}-{addr}-{string.Join("-", path)}")) {
+                                if (ImGui.TreeNode($"Fixed {ParseTypeName(fixedArray.Type)} Array##{member.Name}-{addr}-{string.Join("-", path)}")) {
 
                                     var arrAddr = (IntPtr) addr;
                                     for (var i = 0; i < fixedArray.Count; i++) {
-                                        var arrObj = Marshal.PtrToStructure(arrAddr, fixedArray.Type);
+                                        var arrObj = SafeMemory.PtrToStructure(arrAddr, fixedArray.Type);
                                         PrintOutObject(arrObj, (ulong)arrAddr.ToInt64(), new List<string>(path) { $"_arrValue_{i}" }, false, $"[{i}] {arrObj}");
                                         arrAddr += Marshal.SizeOf(fixedArray.Type);
                                     }
@@ -403,7 +432,7 @@ namespace SimpleTweaksPlugin.Debugging {
                             
                         } else {
                         
-                            if (ImGui.TreeNode($"Fixed {fixedBuffer.ElementType.Name} Buffer##{member.Name}-{addr}-{string.Join("-", path)}")) {
+                            if (ImGui.TreeNode($"Fixed {ParseTypeName(fixedBuffer.ElementType)} Buffer##{member.Name}-{addr}-{string.Join("-", path)}")) {
                                 var display = true;
                                 var child = false;
                                 if (fixedBuffer.ElementType == typeof(byte) && fixedBuffer.Length > 0x80) {
@@ -524,6 +553,16 @@ namespace SimpleTweaksPlugin.Debugging {
             return (T)_plugin.PluginConfig.Debugging.SavedValues[key];
         }
 
+        private static string ParseTypeName(Type type, List<Type> loopSafety = null) {
+            if (!type.IsGenericType) return type.Name;
+            loopSafety ??= new List<Type>();
+            if (loopSafety.Contains(type)) return $"...{type.Name}";
+            loopSafety.Add(type);
+            var n = type.Name.Split('`')[0];
+            var gArgs = type.GetGenericArguments().Select(t => $"{ParseTypeName(t, loopSafety)}");
+            return $"{n}<{string.Join(',', gArgs)}>";
+        }
+        
         public static unsafe void PrintOutObject(object obj, ulong addr, List<string> path, bool autoExpand = false, string headerText = null) {
             if (obj is Utf8String utf8String) {
 
@@ -603,9 +642,14 @@ namespace SimpleTweaksPlugin.Debugging {
                         var fixedBuffer = (FixedBufferAttribute) f.GetCustomAttribute(typeof(FixedBufferAttribute));
                         if (fixedBuffer != null) {
                             var fixedArray = (FixedArrayAttribute)f.GetCustomAttribute(typeof(FixedArrayAttribute));
+                            var fixedSizeArray = f.GetCustomAttribute(typeof(FixedSizeArrayAttribute<>));
                             ImGui.Text($"fixed");
                             ImGui.SameLine();
-                            if (fixedArray != null) {
+                            if (fixedSizeArray != null) {
+                                var fixedType = fixedSizeArray.GetType().GetGenericArguments()[0];
+                                var size = (int) fixedSizeArray.GetType().GetProperty("Count").GetValue(fixedSizeArray);
+                                ImGui.TextColored(new Vector4(0.2f, 0.9f, 0.9f, 1), $"{ParseTypeName(fixedType)}[{size}]");
+                            } else if (fixedArray != null) {
                                 if (fixedArray.Type == typeof(string) && fixedArray.Count == 1) {
                                     ImGui.TextColored(new Vector4(0.2f, 0.9f, 0.9f, 1), $"{fixedArray.Type.Name}");
                                 } else {
@@ -619,9 +663,9 @@ namespace SimpleTweaksPlugin.Debugging {
                             
                             if (f.FieldType.IsArray) {
                                 var arr = (Array) f.GetValue(obj);
-                                ImGui.TextColored(new Vector4(0.2f, 0.9f, 0.9f, 1), $"{f.FieldType.GetElementType()?.Name ?? f.FieldType.Name}[{arr.Length}]");
+                                ImGui.TextColored(new Vector4(0.2f, 0.9f, 0.9f, 1), $"{ParseTypeName(f.FieldType.GetElementType() ?? f.FieldType)}[{arr.Length}]");
                             } else {
-                                ImGui.TextColored(new Vector4(0.2f, 0.9f, 0.9f, 1), $"{f.FieldType.Name}");
+                                ImGui.TextColored(new Vector4(0.2f, 0.9f, 0.9f, 1), $"{ParseTypeName(f.FieldType)}");
                             }
                         }
 
@@ -643,15 +687,7 @@ namespace SimpleTweaksPlugin.Debugging {
                     }
 
                     foreach (var p in obj.GetType().GetProperties()) {
-                        
-                        if (p.PropertyType.IsGenericType) {
-                            var gTypeName = string.Join(',', p.PropertyType.GetGenericArguments().Select(gt => gt.Name));
-                            var baseName = p.PropertyType.Name.Split('`')[0];
-                            ImGui.TextColored(new Vector4(0.2f, 0.9f, 0.9f, 1), $"{baseName}<{gTypeName}>");
-                        } else {
-                            ImGui.TextColored(new Vector4(0.2f, 0.9f, 0.9f, 1), $"{p.PropertyType.Name}");
-                        }
-
+                        ImGui.TextColored(new Vector4(0.2f, 0.9f, 0.9f, 1), $"{ParseTypeName(p.PropertyType)}");
                         ImGui.SameLine();
                         ImGui.TextColored(new Vector4(0.2f, 0.6f, 0.4f, 1), $"{p.Name}: ");
                         ImGui.SameLine();

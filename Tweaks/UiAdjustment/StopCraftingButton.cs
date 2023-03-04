@@ -73,6 +73,11 @@ public unsafe class StopCraftingButton : UiAdjustments.SubTweak {
 
     private HookWrapper<Common.AddonOnUpdate> craftingLogUpdateHook;
     
+    public override void Setup() {
+        AddChangelog("1.8.2.1", "Fixed a potential crash in specific circumstances.");
+        base.Setup();
+    }
+
     public override void Enable() {
         craftingLogUpdateHook ??= Common.HookAfterAddonUpdate("40 55 57 41 54 41 55 41 57 48 8D AC 24", CraftingLogUpdated);
         craftingLogUpdateHook?.Enable();
@@ -206,6 +211,7 @@ public unsafe class StopCraftingButton : UiAdjustments.SubTweak {
         selectedRecipeId = 0;
         if (Service.ClientState.LocalPlayer == null) return CraftReadyState.NotReady;
         var uiRecipeNote = RecipeNote.Instance();
+        if (uiRecipeNote == null || uiRecipeNote->RecipeList == null) return CraftReadyState.NotReady;
         var selectedRecipe = uiRecipeNote->RecipeList->SelectedRecipe;
         if (selectedRecipe == null) return CraftReadyState.NotReady;
         selectedRecipeId = selectedRecipe->RecipeId;
