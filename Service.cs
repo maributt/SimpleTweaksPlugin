@@ -5,6 +5,7 @@ using Dalamud.Game.ClientState;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects;
+using Dalamud.Game.ClientState.Party;
 using Dalamud.Game.Command;
 using Dalamud.Game.Gui;
 using Dalamud.Game.Gui.Toast;
@@ -30,4 +31,5 @@ public class Service {
     [PluginService] public static SigScanner SigScanner { get; private set; }
     [PluginService] public static TargetManager Targets { get; private set; }
     [PluginService] public static ToastGui Toasts { get; private set; }
+    [PluginService] public static PartyList PartyList { get; private set; }
 }
