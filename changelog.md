@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.8.4.0]
+***New Tweaks***
+> **`Hide quality bar while crafting NO-HQ item.`** - Hides the quality bar in the Synthesis window while crafting an item that can not be HQ or Collectable.
+
+
+***Tweak Changes***
+> **`Expanded Currency Display`** - Added support for Collectibles
+
+> **`Fade Unavailable Actions`**
+> - Tweak now only applies to combat actions
+> - Properly resets hotbar state on unload/disable
+
+> **`Improved Duty Finder Settings`** - Fixed UI displaying on wrong monitor in specific circumstances. *(Aireil)*
+
+> **`Set Option Command`**
+> - Fixed issues when using gamepad mode
+> - Re-added accidentally remove gamepad mode option
+> - Added 'LimitMouseToGameWindow' and 'CharacterDisplayLimit'
+> - Fixed 'DisplayNameSize' using incorrect values
+
+> **`Simplified Equipment Job Display`** - Fixed tweak for Japanese clients.
+
+
+## [1.8.3.2]
+***New Tweaks***
+> **`Echo Story Selection`** - When given multiple choices during quests, print the selected option to chat. *(MidoriKami)*
+
+
+***Tweak Changes***
+> **`Fade Unavailable Actions`**
+> - Tweak now only applies to the icon image itself and not the entire button
+> - Add option to apply transparency to the slot frame of the icon
+> - Add option to apply to sync'd skills only
+
+> **`Set Option Command`** - Improved reliability through patches
+
+
+## [1.8.3.1]
+***New Tweaks***
+> **`Fade Unavailable Actions`** - Instead of darkening icons, makes them transparent when unavailable *(MidoriKami)*
+
+
+***Tweak Changes***
+> **`Expanded Currency Display`** - Use configured format culture for number display, should fix French issue
+
+> **`Target Castbar Countdown`** - Add TopRight option for displaying countdown
+
+
 ## [1.8.3.0]
 ***General Changes***
 > Added a changelog
@@ -22,19 +70,19 @@
 
 > **`Simplified Equipment Job Display`** - Hides classes from equipment tooltips when their jobs are unlocked.
 
+> **`SystemConfig in Group Pose`** - Allows the use of the /systemconfig command while in gpose.
+
 > **`Target Castbar Countdown`** - Displays time remaining on targets ability cast. *(MidoriKami)*
 
 > **`Track Gacha Items`** - Adds the collectable checkmark to gacha items, such as Triple Triad card packs, when all potential items have been obtained.
 
 
 ***Tweak Changes***
-> **`Enhanced Loot Window`** - Rebuilt tweak to use images
-
-> **`Enhanced Loot Window`** - Fixed tweak not checking armory and equipped items
-
-> **`Enhanced Loot Window`** - Added 'Lock Loot Window' feature
-
-> **`Enhanced Loot Window`** - Added configuration options
+> **`Enhanced Loot Window`**
+> - Rebuilt tweak to use images
+> - Fixed tweak not checking armory and equipped items
+> - Added 'Lock Loot Window' feature
+> - Added configuration options
 
 > **`Fix '/target' command`** - Fixed tweak not working in french. *(Aireil)*
 

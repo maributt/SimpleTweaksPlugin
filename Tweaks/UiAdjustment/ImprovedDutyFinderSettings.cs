@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
+using Dalamud.Interface;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
@@ -24,6 +25,7 @@ public unsafe class ImprovedDutyFinderSettings : UiAdjustments.SubTweak {
 
     public override void Setup() {
         AddChangelogNewTweak("1.8.3.0");
+        AddChangelog("1.8.4.0", "Fixed UI displaying on wrong monitor in specific circumstances.").Author("Aireil");
         base.Setup();
     }
 
@@ -38,6 +40,10 @@ public unsafe class ImprovedDutyFinderSettings : UiAdjustments.SubTweak {
         Service.PluginInterface.UiBuilder.Draw -= this.OnDraw;
         this.DisposeIcons();
         var addon = (AtkUnitBase*)Service.GameGui.GetAddonByName("ContentsFinder");
+        if (addon == null) {
+            addon = (AtkUnitBase*)Service.GameGui.GetAddonByName("RaidFinder");
+        }
+
         if (addon != null) {
             var buttons = addon->UldManager.SearchNodeById(6);
             if (buttons != null) {
@@ -212,6 +218,10 @@ public unsafe class ImprovedDutyFinderSettings : UiAdjustments.SubTweak {
 
     private void OnDraw() {
         var addon = (AtkUnitBase*)Service.GameGui.GetAddonByName("ContentsFinder");
+        if (addon == null) {
+            addon = (AtkUnitBase*)Service.GameGui.GetAddonByName("RaidFinder");
+        }
+
         if (addon == null || !this.iconsReady || !this.Enabled) {
             return;
         }
@@ -233,6 +243,7 @@ public unsafe class ImprovedDutyFinderSettings : UiAdjustments.SubTweak {
 
         try {
             var windowScale = root->ScaleX;
+            ImGuiHelpers.ForceNextWindowMainViewport();
             ImGui.SetNextWindowPos(new Vector2(root->X + ((header->X + buttonsHeader->X) * windowScale), root->Y + (buttonsHeader->Y * windowScale)), ImGuiCond.Always);
             if (ImGui.Begin(
                     "ImprovedDutyFinderSettings",
