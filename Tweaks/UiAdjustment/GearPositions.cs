@@ -460,6 +460,7 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
         if (bagWidget != null) ResetBagWidget(bagWidget);
         bagWidgetUpdate?.Disable();
         addonControllerInputHook?.Disable();
+        Common.AddonSetup -= OnAddonSetup;
         base.Disable();
     }
 

@@ -19,6 +19,8 @@ public abstract class BaseTweak {
 
     public virtual bool Ready { get; protected set; }
     public virtual bool Enabled { get; protected set; }
+    
+    public bool IsDisposed { get; private set; }
 
     public virtual string Key => GetType().Name;
 
@@ -32,6 +34,7 @@ public abstract class BaseTweak {
     protected virtual string Author => null;
     public virtual bool Experimental => false;
     public virtual IEnumerable<string> Tags { get; } = new string[0];
+    internal bool ForceOpenConfig { private get; set; }
 
     public TweakProvider TweakProvider { get; private set; } = null;
 
@@ -135,9 +138,12 @@ public abstract class BaseTweak {
     }
         
     public bool DrawConfig(ref bool hasChanged) {
+        var shouldForceOpenConfig = ForceOpenConfig;
+        ForceOpenConfig = false;
         var configTreeOpen = false;
         if ((UseAutoConfig || DrawConfigTree != null) && Enabled) {
             var x = ImGui.GetCursorPosX();
+            if (shouldForceOpenConfig) ImGui.SetNextItemOpen(true);
             if (ImGui.TreeNode($"{LocalizedName}##treeConfig_{GetType().Name}")) {
                 configTreeOpen = true;
                 DrawCommon();
@@ -357,6 +363,11 @@ public abstract class BaseTweak {
 
     public virtual void Dispose() {
         Ready = false;
+    }
+
+    internal void InternalDispose() {
+        Dispose();
+        IsDisposed = true;
     }
 
     protected ChangelogEntry AddChangelog(string version, string log) => Changelog.Add(this, version, log);

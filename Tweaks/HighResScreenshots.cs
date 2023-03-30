@@ -12,10 +12,9 @@ using SimpleTweaksPlugin.Utility;
 namespace SimpleTweaksPlugin.Tweaks;
 
 public unsafe class HighResScreenshots : Tweak {
-    public override string Name => "High Resolution Screenshots";
-    public override string Description => "Increases the resolution in game screenshots are taken at.";
+    public override string Name => "Screenshot Improvements";
+    public override string Description => "Allows taking higher resolution screenshots, Hiding Dalamud & Game UIs and removing the copyright notice from screenshots.";
     protected override string Author => "NotNite";
-    public override bool Experimental => true;
 
     private nint copyrightShaderAddress;
 
@@ -83,8 +82,9 @@ public unsafe class HighResScreenshots : Tweak {
     public override void Setup() {
         AddChangelogNewTweak("1.8.2.0");
         AddChangelog("1.8.3.0", "Added option to hide dalamud UI for screenshot.");
-        AddChangelog(Changelog.UnreleasedVersion, "Added option to hide game UI for screenshots.");
-        AddChangelog(Changelog.UnreleasedVersion, "Added option to remove the FFXIV Copyright from screenshots.");
+        AddChangelog("1.8.5.0", "Added option to hide game UI for screenshots.");
+        AddChangelog("1.8.5.0", "Added option to remove the FFXIV Copyright from screenshots.");
+        AddChangelog("1.8.5.1", "Renamed from 'High Resolution Screenshots' to 'Screenshot Improvements'");
         base.Setup();
     }
 
@@ -119,9 +119,11 @@ public unsafe class HighResScreenshots : Tweak {
             oldWidth = device->Width;
             oldHeight = device->Height;
 
-            device->NewWidth = oldWidth * (uint)Config.Scale;
-            device->NewHeight = oldHeight * (uint)Config.Scale;
-            device->RequestResolutionChange = 1;
+            if (Config.Scale > 1) {
+                device->NewWidth = oldWidth * (uint)Config.Scale;
+                device->NewHeight = oldHeight * (uint)Config.Scale;
+                device->RequestResolutionChange = 1;
+            }
 
             if (Config.HideGameUi) {
                 var raptureAtkModule = Framework.Instance()->GetUiModule()->GetRaptureAtkModule();
@@ -157,9 +159,11 @@ public unsafe class HighResScreenshots : Tweak {
                 }
 
                 var device = Device.Instance();
-                device->NewWidth = oldWidth;
-                device->NewHeight = oldHeight;
-                device->RequestResolutionChange = 1;
+                if (device->Width != oldWidth || device->Height != oldHeight) {
+                    device->NewWidth = oldWidth;
+                    device->NewHeight = oldHeight;
+                    device->RequestResolutionChange = 1;
+                }
             }, delayTicks: 1);
 
             Service.Framework.RunOnTick(() => {

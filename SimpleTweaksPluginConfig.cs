@@ -59,11 +59,21 @@ public partial class SimpleTweaksPluginConfig : IPluginConfiguration {
     [NonSerialized] private List<BaseTweak> searchResults = new List<BaseTweak>();
 
     internal void FocusTweak(BaseTweak tweak) {
+        plugin.ConfigWindow.IsOpen = true;
+        plugin.ConfigWindow.Collapsed = false;
+        searchResults.Clear();
+        
+        if (tweak is SubTweakManager stm) {
+            setTab = stm;
+            searchInput = string.Empty;
+            lastSearchInput = string.Empty;
+            return;
+        }
+        
         searchInput = tweak.Name;
         lastSearchInput = tweak.Name;
-        searchResults.Clear();
         searchResults.Add(tweak);
-        plugin.ConfigWindow.Collapsed = false;
+        tweak.ForceOpenConfig = true;
     }
 
     internal void ClearSearch() {

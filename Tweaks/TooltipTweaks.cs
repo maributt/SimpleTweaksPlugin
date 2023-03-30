@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Memory;
+using Dalamud.Memory.Exceptions;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using SimpleTweaksPlugin.TweakSystem;
@@ -28,34 +29,64 @@ public class TooltipTweaks : SubTweakManager<TooltipTweaks.SubTweak> {
         
         protected static unsafe SeString GetTooltipString(StringArrayData* stringArrayData, int field) {
             try {
+                if (stringArrayData->AtkArrayData.Size <= field) 
+                    throw new IndexOutOfRangeException($"Attempted to get Index#{field} ({field}) but size is only {stringArrayData->AtkArrayData.Size}");
+
                 var stringAddress = new IntPtr(stringArrayData->StringArray[field]);
                 return stringAddress == IntPtr.Zero ? null : MemoryHelper.ReadSeStringNullTerminated(stringAddress);
-            } catch {
-                return null;
+            } catch (Exception ex) {
+                SimpleLog.Error(ex);
+                return new SeString();
             }
         }
 
         protected static unsafe void SetTooltipString(StringArrayData* stringArrayData, TooltipTweaks.ItemTooltipField field, SeString seString) {
             try {
-                if (!ItemStringPointers.ContainsKey(field)) ItemStringPointers.Add(field, Marshal.AllocHGlobal(4096));
+                seString ??= new SeString();
+                
+                if (stringArrayData->AtkArrayData.Size <= (int)field) 
+                    throw new IndexOutOfRangeException($"Attempted to set Index#{(int)field} ({field}) but size is only {stringArrayData->AtkArrayData.Size}");
+
+                if (!ItemStringPointers.ContainsKey(field)) {
+                    var newAlloc = Marshal.AllocHGlobal(4096);
+                    if (newAlloc == nint.Zero) {
+                        throw new MemoryAllocationException("Failed to allocate memory.");
+                    }
+                    ItemStringPointers.Add(field, newAlloc);
+                }
+                
                 var bytes = seString.Encode();
+                if (bytes.Length > 4095) throw new Exception($"Attempted to set a string of length {bytes.Length} to {field}. Max size is 4096");
                 Marshal.Copy(bytes, 0, ItemStringPointers[field], bytes.Length);
                 Marshal.WriteByte(ItemStringPointers[field], bytes.Length, 0);
                 stringArrayData->StringArray[(int)field] = (byte*)ItemStringPointers[field];
-            } catch {
-                //
+            } catch (Exception ex) {
+                throw;
             }
         }
         
         protected static unsafe void SetTooltipString(StringArrayData* stringArrayData, TooltipTweaks.ActionTooltipField field, SeString seString) {
             try {
-                if (!ActionStringPointers.ContainsKey(field)) ActionStringPointers.Add(field, Marshal.AllocHGlobal(4096));
+                seString ??= new SeString();
+                
+                if (stringArrayData->AtkArrayData.Size <= (int)field) {
+                    throw new IndexOutOfRangeException($"Attempted to set Index#{(int)field} ({field}) but size is only {stringArrayData->AtkArrayData.Size}");
+                }
+                    
+                if (!ActionStringPointers.ContainsKey(field)) {
+                    var newAlloc = Marshal.AllocHGlobal(4096);
+                    if (newAlloc == nint.Zero) {
+                        throw new MemoryAllocationException("Failed to allocate memory.");
+                    }
+                    ActionStringPointers.Add(field, newAlloc);
+                }
                 var bytes = seString.Encode();
+                if (bytes.Length > 4095) throw new Exception($"Attempted to set a string of length {bytes.Length} to {field}. Max size is 4096");
                 Marshal.Copy(bytes, 0, ActionStringPointers[field], bytes.Length);
                 Marshal.WriteByte(ActionStringPointers[field], bytes.Length, 0);
                 stringArrayData->StringArray[(int)field] = (byte*)ActionStringPointers[field];
             } catch {
-                //
+                throw;
             }
         }
 
@@ -65,6 +96,7 @@ public class TooltipTweaks : SubTweakManager<TooltipTweaks.SubTweak> {
     }
 
     public override string Name => "Tooltip Tweaks";
+    public override uint Version => 2;
     private unsafe delegate IntPtr ActionTooltipDelegate(AtkUnitBase* a1, void* a2, ulong a3);
     private HookWrapper<ActionTooltipDelegate> actionTooltipHook;
 
@@ -82,6 +114,11 @@ public class TooltipTweaks : SubTweakManager<TooltipTweaks.SubTweak> {
 
     private unsafe delegate void* GetItemRowDelegate(uint itemId);
     private HookWrapper<GetItemRowDelegate> getItemRowHook;
+
+    public override void Setup() {
+        AddChangelog("1.8.5.1", "Added additional protections to attempt to reduce crashing. Please report any crashes you believe may be related to tooltips.");
+        base.Setup();
+    }
 
     public override unsafe void Enable() {
         if (!Ready) return;
