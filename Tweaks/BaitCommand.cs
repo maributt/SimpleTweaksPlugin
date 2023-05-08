@@ -27,12 +27,18 @@ public unsafe class BaitCommand : CommandTweak {
     private ExecuteCommandDelegate executeCommand;
     
     public override void Setup() {
+        base.Setup();
+        AddChangelog("1.8.7.0", "Fixed tweak not enabling when starting the game.");
+    }
+
+    public override void Enable() {
         currentBaitAddress =
             Service.SigScanner.GetStaticAddressFromSig("48 83 C4 30 5B C3 49 8B C8 E8 ?? ?? ?? ?? 3B 05");
         if (executeCommand is null) {
             var executeCommandPtr = Service.SigScanner.ScanText("E8 ?? ?? ?? ?? 8D 43 0A");
             executeCommand = Marshal.GetDelegateForFunctionPointer<ExecuteCommandDelegate>(executeCommandPtr);
         }
+        base.Enable();
     }
 
     public static int HasItem(uint itemID)
