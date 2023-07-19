@@ -134,7 +134,7 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment
 
         private string FormatHp(float hpPercentage)
         {
-            return $"{hpPercentage.ToString((hpPercentage >= 1 ? "0" : "") + "0." + new string('0', Config.DecimalPrecision), CultureInfo.InvariantCulture)}%";
+            return $"{hpPercentage.ToString((hpPercentage >= 1 ? "0" : "") + "0." + new string('0', Config.DecimalPrecision), CultureInfo.InvariantCulture)}" + "%";
         }
 
         private void ResetTargetInfo()
