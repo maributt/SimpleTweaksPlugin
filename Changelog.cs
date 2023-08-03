@@ -50,7 +50,7 @@ public class Changelog : Window {
         Add("1.8.7.1", "General fixes for 6.4");
     }
 
-#if DEBUG
+#if DEBUG || PRIVATE
     public const string UnreleasedVersion = "99.99.99.99";
 #endif 
 
