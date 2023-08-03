@@ -8,6 +8,7 @@ using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Client.System.Memory;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
@@ -81,27 +82,68 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
     private readonly Dictionary<uint, string> tooltipStrings = new();
     private SimpleEvent? simpleEvent;
 
+    private delegate void* HudLayoutDelegate(AgentHudLayout* agentHudLayout);
+    private HookWrapper<HudLayoutDelegate>? openHudLayoutHook;
+    private HookWrapper<HudLayoutDelegate>? closeHudLayoutHook;
+
+    private delegate void* HudLayoutChangeDelegate(void* a1, uint a2, byte a3, byte a4);
+    private HookWrapper<HudLayoutChangeDelegate>? hudLayoutChangeHook;
+
+
     public override void Setup() {
         AddChangelogNewTweak("1.8.3.0");
         AddChangelog("1.8.3.1", "Use configured format culture for number display, should fix French issue");
         AddChangelog("1.8.4.0", "Added support for Collectibles");
-        AddChangelog(Changelog.UnreleasedVersion, "Added option for adjustable spacing in horizontal layouts.");
-        AddChangelog(Changelog.UnreleasedVersion, "Added option to display in a grid.");
-        AddChangelog(Changelog.UnreleasedVersion, "Added option to set the position of a currency individually.");
-        AddChangelog(Changelog.UnreleasedVersion, "Added tooltips when mouse is over the currency icons.");
+        AddChangelog("1.8.8.0", "Added option for adjustable spacing in horizontal layouts.");
+        AddChangelog("1.8.8.0", "Added option to display in a grid.");
+        AddChangelog("1.8.8.0", "Added option to set the position of a currency individually.");
+        AddChangelog("1.8.8.0", "Added tooltips when mouse is over the currency icons.");
+        AddChangelog("1.8.8.1", "Attempting to avoid gil addon getting thrown around when layout changes.");
+        AddChangelog("1.8.8.2", "Fixed positioning of gil display moving when scale is anything other than 100%");
         base.Setup();
     }
 
-    public override void Enable()
+    protected override void Enable()
     {
         simpleEvent ??= new SimpleEvent(HandleEvent);
         TweakConfig = LoadConfig<Config>() ?? new Config();
         
         if (TweakConfig.DisplayDirection is Direction.Up or Direction.Down && TweakConfig.GridGrowth is Direction.Up or Direction.Down) TweakConfig.GridGrowth = Direction.Left;
         if (TweakConfig.DisplayDirection is Direction.Left or Direction.Right && TweakConfig.GridGrowth is Direction.Left or Direction.Right) TweakConfig.GridGrowth = Direction.Up;
+
+        openHudLayoutHook ??= Common.Hook<HudLayoutDelegate>("40 53 48 83 EC 20 48 8B 01 48 8B D9 FF 50 28 48 8B CB 84 C0 74 1A", OnOpenHudLayout);
+        openHudLayoutHook?.Enable();
         
-        Common.FrameworkUpdate += OnFrameworkUpdate;
+        closeHudLayoutHook ??= Common.Hook<HudLayoutDelegate>("48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 48 8B D9 48 8B 49 10 48 8B 01 FF 50 40 48 8B C8", OnCloseHudLayout);
+        closeHudLayoutHook?.Enable();
+
+        hudLayoutChangeHook ??= Common.Hook<HudLayoutChangeDelegate>("E8 ?? ?? ?? ?? 33 C0 EB 15 ", OnHudLayoutChange);
+        hudLayoutChangeHook?.Enable();
+
+        var agent = Framework.Instance()->GetUiModule()->GetAgentModule()->GetAgentHudLayout();
+        if (!agent->AgentInterface.IsAgentActive()) {
+            Common.FrameworkUpdate += OnFrameworkUpdate;
+        }
+        
         base.Enable();
+    }
+
+    private void* OnOpenHudLayout(AgentHudLayout* agent) {
+        FreeAllNodes();
+        Common.FrameworkUpdate -= OnFrameworkUpdate;
+        return openHudLayoutHook!.Original(agent);
+    }
+
+    private void* OnCloseHudLayout(AgentHudLayout* agent) {
+        FreeAllNodes();
+        Common.FrameworkUpdate -= OnFrameworkUpdate;
+        Common.FrameworkUpdate += OnFrameworkUpdate;
+        return closeHudLayoutHook!.Original(agent);
+    }
+    
+    private void* OnHudLayoutChange(void* a1, uint a2, byte a3, byte a4) {
+        FreeAllNodes();
+        return hudLayoutChangeHook!.Original(a1, a2, a3, a4);
     }
 
     private void HandleEvent(AtkEventType eventType, AtkUnitBase* atkUnitBase, AtkResNode* node) {
@@ -118,13 +160,23 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
         }
     }
 
-    public override void Disable()
+    protected override void Disable()
     {
+        openHudLayoutHook?.Disable();
+        closeHudLayoutHook?.Disable();
+        hudLayoutChangeHook?.Disable();
         simpleEvent?.Dispose();
         SaveConfig(TweakConfig);
         Common.FrameworkUpdate -= OnFrameworkUpdate;
         FreeAllNodes();
         base.Disable();
+    }
+
+    public override void Dispose() {
+        openHudLayoutHook?.Dispose();
+        closeHudLayoutHook?.Dispose();
+        hudLayoutChangeHook?.Dispose();
+        base.Dispose();
     }
 
     private void UpdatePosition(AtkResNode* baseNode, Vector2 resNodeSize, uint index, CurrencyEntry currencyInfo, ref Vector2 position) {
@@ -207,7 +259,7 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
         // Resize Addon for Events
         AddonMoney->RootNode->SetHeight(1000);
         AddonMoney->RootNode->SetWidth(1000);
-        AddonMoney->RootNode->SetPositionFloat(AddonMoney->X - 500, AddonMoney->Y - 500);
+        AddonMoney->RootNode->SetPositionFloat(AddonMoney->X - 500 * AddonMoney->GetScale() * AddonMoney->RootNode->ScaleX, AddonMoney->Y - 500 * AddonMoney->GetScale() * AddonMoney->RootNode->ScaleY);
         
         currencyPositionNode->SetPositionFloat(620, 500);
         counterPositionNode->AtkResNode.SetPositionFloat(500, 508);

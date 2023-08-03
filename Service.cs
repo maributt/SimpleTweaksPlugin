@@ -7,6 +7,7 @@ using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Party;
 using Dalamud.Game.Command;
+using Dalamud.Game.Config;
 using Dalamud.Game.Gui;
 using Dalamud.Game.Gui.Toast;
 using Dalamud.Game.Libc;
@@ -32,4 +33,5 @@ public class Service {
     [PluginService] public static TargetManager Targets { get; private set; }
     [PluginService] public static ToastGui Toasts { get; private set; }
     [PluginService] public static PartyList PartyList { get; private set; }
+    [PluginService] public static GameConfig GameConfig { get; private set; }
 }

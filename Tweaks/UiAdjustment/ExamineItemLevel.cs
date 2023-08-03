@@ -35,7 +35,7 @@ public unsafe class ExamineItemLevel : UiAdjustments.SubTweak {
     private delegate byte CharacterInspectOnRefresh(AtkUnitBase* atkUnitBase, int a2, AtkValue* a3);
     private HookWrapper<CharacterInspectOnRefresh> onExamineRefresh;
 
-    public override void Enable() {
+    protected override void Enable() {
         if (!Ready) return;
         TweakConfig = LoadConfig<Config>() ?? new Config();
 
@@ -116,7 +116,7 @@ public unsafe class ExamineItemLevel : UiAdjustments.SubTweak {
 
             textNode->AtkResNode.Height = 24;
             textNode->AtkResNode.Width = 80;
-            textNode->AtkResNode.Flags |= 0x10;
+            textNode->AtkResNode.NodeFlags |= NodeFlags.Visible;
             textNode->AtkResNode.Y = 0;
             textNode->AtkResNode.X = 92;
             textNode->AtkResNode.Flags_2 |= 0x1;
@@ -139,7 +139,7 @@ public unsafe class ExamineItemLevel : UiAdjustments.SubTweak {
                 iconNode->AtkResNode.Width = 24;
                 iconNode->AtkResNode.X = textNode->AtkResNode.X + 2;
                 iconNode->AtkResNode.Y = textNode->AtkResNode.Y + 3;
-                iconNode->AtkResNode.Flags |= 0x10; // Visible
+                iconNode->AtkResNode.NodeFlags |= NodeFlags.Visible;
                 iconNode->AtkResNode.Flags_2 |= 0x1; // Update
 
                 iconNode->AtkResNode.ParentNode = textNode->AtkResNode.ParentNode;
@@ -161,7 +161,7 @@ public unsafe class ExamineItemLevel : UiAdjustments.SubTweak {
         }
     }
 
-    public override void Disable() {
+    protected override void Disable() {
         SaveConfig(TweakConfig);
         onExamineRefresh?.Disable();
         ShowItemLevel(true);

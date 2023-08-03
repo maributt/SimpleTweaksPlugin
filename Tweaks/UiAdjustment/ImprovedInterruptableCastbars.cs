@@ -63,14 +63,14 @@ public unsafe class ImprovedInterruptableCastbars : UiAdjustments.SubTweak
         base.Setup();
     }
 
-    public override void Enable()
+    protected override void Enable()
     {
         TweakConfig = LoadConfig<Config>() ?? new Config();
         Common.FrameworkUpdate += OnFrameworkUpdate;
         base.Enable();
     }
 
-    public override void Disable()
+    protected override void Disable()
     {
         SaveConfig(TweakConfig);
         Common.FrameworkUpdate -= OnFrameworkUpdate;
@@ -152,7 +152,7 @@ public unsafe class ImprovedInterruptableCastbars : UiAdjustments.SubTweak
         if (!UiHelper.IsAddonReady(parent)) return;
         
         var imageNode = UiHelper.MakeImageNode(nodeId, new UiHelper.PartInfo(0, 0, 36, 36));
-        imageNode->AtkResNode.Flags = 8243;
+        imageNode->AtkResNode.NodeFlags = NodeFlags.AnchorLeft | NodeFlags.AnchorTop | NodeFlags.Visible | NodeFlags.Enabled | NodeFlags.EmitsEvents; // 8243;
         imageNode->WrapMode = 1;
         imageNode->Flags = (byte) ImageNodeFlags.AutoFit;
         

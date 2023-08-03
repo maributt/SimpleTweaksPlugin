@@ -5,9 +5,12 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Plugin;
 using ImGuiNET;
+using ImGuiScene;
+using JetBrains.Annotations;
 using Newtonsoft.Json;
 using SimpleTweaksPlugin.Events;
 using SimpleTweaksPlugin.Utility;
@@ -21,19 +24,22 @@ public abstract class BaseTweak {
 
     public virtual bool Ready { get; protected set; }
     public virtual bool Enabled { get; protected set; }
+
+    private bool hasPreviewImage;
+    private TextureWrap previewImage;
     
     public bool IsDisposed { get; private set; }
 
     public virtual string Key => GetType().Name;
 
-    public abstract string Name { get; }
+    public virtual string Name => TweakNameAttribute?.Name ?? GetType().Name;
 
     public virtual uint Version => 1;
 
     public string LocalizedName => LocString("Name", Name, "Tweak Name");
 
-    public virtual string Description => null;
-    protected virtual string Author => null;
+    public virtual string Description => TweakDescriptionAttribute?.Description;
+    protected virtual string Author => TweakAuthorAttribute?.Author;
     public virtual bool Experimental => false;
     public virtual IEnumerable<string> Tags { get; } = new string[0];
     internal bool ForceOpenConfig { private get; set; }
@@ -53,6 +59,7 @@ public abstract class BaseTweak {
         this.Plugin = plugin;
         this.TweakProvider = tweakProvider;
         this.TweakManager = tweakManager;
+        
     }
 
     public string LocString(string key, string fallback, string description = null) {
@@ -65,6 +72,24 @@ public abstract class BaseTweak {
     }
 
     private void DrawCommon() {
+        if (hasPreviewImage) {
+            ImGui.SameLine();
+            ImGuiExt.IconButton($"##previewButton", FontAwesomeIcon.Image);
+            if (ImGui.IsItemHovered()) {
+                ImGui.BeginTooltip();
+                if (previewImage == null) {
+                    try {
+                        previewImage = PluginInterface.UiBuilder.LoadImage(Path.Join(PluginInterface.AssemblyLocation.DirectoryName, "TweakPreviews", $"{Key}.png"));
+                    } catch {
+                        hasPreviewImage = false;
+                    }
+                } else {
+                    ImGui.Image(previewImage.ImGuiHandle, new Vector2(previewImage.Width, previewImage.Height));
+                }
+                ImGui.EndTooltip();
+            }
+        }
+        
         if (this.Experimental) {
             ImGui.SameLine();
             ImGui.TextColored(new Vector4(1, 0, 0, 1), "  Experimental");
@@ -358,24 +383,76 @@ public abstract class BaseTweak {
     protected virtual DrawConfigDelegate DrawConfigTree => null;
         
     public virtual void Setup() {
+        hasPreviewImage = File.Exists(Path.Join(PluginInterface.AssemblyLocation.DirectoryName, "TweakPreviews", $"{Key}.png"));
+
+        foreach (var c in GetType().GetCustomAttributes<ChangelogAttribute>()) {
+            if (c is TweakReleaseVersionAttribute) {
+                AddChangelogNewTweak(c.Version);
+            }
+
+            foreach (var change in c.Changes) {
+                AddChangelog(c.Version, change).Author(c.Author);
+            }
+        }
+        
+        
         Ready = true;
     }
 
-    public virtual void Enable() {
+    private bool signatureHelperInitalized = false;
+    internal void InternalEnable() {
+        if (!signatureHelperInitalized) {
+            SignatureHelper.Initialise(this);
+            signatureHelperInitalized = true;
+        }
+        
+        Enable();
         EventController.RegisterEvents(this);
+        
+        foreach (var (field, attribute) in this.GetFieldsWithAttribute<TweakHookAttribute>()) {
+            if (!attribute.AutoEnable) continue;
+            SimpleLog.Verbose($"Enable Tweak Hook: [{Name}] {field.Name}");
+            if (field.GetValue(this) is IHookWrapper h) {
+                h.Enable();
+            }
+        }
+        
         Enabled = true;
     }
 
-    public virtual void Disable() {
+    protected virtual void Enable() {
+        
+    }
+
+    internal void InternalDisable() {
+        Disable();
         EventController.UnregisterEvents(this);
+
+        foreach (var (field, _) in this.GetFieldsWithAttribute<TweakHookAttribute>()) {
+            SimpleLog.Verbose($"Disable Tweak Hook: [{Name}] {field.Name}");
+            if (field.GetValue(this) is IHookWrapper h) {
+                h.Disable();
+            }
+        }
         Enabled = false;
     }
 
+    protected virtual void Disable() {
+        
+    }
+
     public virtual void Dispose() {
+        foreach (var (field, _) in this.GetFieldsWithAttribute<TweakHookAttribute>()) {
+            SimpleLog.Verbose($"Dispose Tweak Hook: [{Name}] {field.Name}");
+            if (field.GetValue(this) is IHookWrapper h) {
+                h.Dispose();
+            }
+        }
         Ready = false;
     }
 
     internal void InternalDispose() {
+        previewImage?.Dispose();
         Dispose();
         IsDisposed = true;
     }
@@ -383,5 +460,38 @@ public abstract class BaseTweak {
     protected ChangelogEntry AddChangelog(string version, string log) => Changelog.Add(this, version, log);
     protected ChangelogEntry AddChangelogNewTweak(string version) => Changelog.AddNewTweak(this, version).Author(Author);
 
+
+    #region Attribute Handles
+
+    private TweakNameAttribute tweakNameAttribute;
+    protected TweakNameAttribute TweakNameAttribute {
+        get {
+            if (tweakNameAttribute != null) return tweakNameAttribute;
+            tweakNameAttribute = GetType().GetCustomAttribute<TweakNameAttribute>() ?? new TweakNameAttribute($"{GetType().Name}");
+            return tweakNameAttribute;
+        }
+    }
+    
+    private TweakDescriptionAttribute tweakDescriptionAttribute;
+    protected TweakDescriptionAttribute TweakDescriptionAttribute {
+        get {
+            if (tweakDescriptionAttribute != null) return tweakDescriptionAttribute;
+            tweakDescriptionAttribute = GetType().GetCustomAttribute<TweakDescriptionAttribute>() ?? TweakDescriptionAttribute.Default;
+            return tweakDescriptionAttribute;
+        }
+    }
+    
+    private TweakAuthorAttribute tweakAuthorAttribute;
+    protected TweakAuthorAttribute TweakAuthorAttribute {
+        get {
+            if (tweakAuthorAttribute != null) return tweakAuthorAttribute;
+            tweakAuthorAttribute = GetType().GetCustomAttribute<TweakAuthorAttribute>() ?? TweakAuthorAttribute.Default;
+            return tweakAuthorAttribute;
+        }
+    }
+
+
+    #endregion
+    
 
 }

@@ -132,6 +132,26 @@ public static unsafe partial class UiHelper
 
         parent->Component->UldManager.UpdateDrawNodeList();
     }
+
+    public static void UnlinkNode<T>(T* atkNode, AtkComponentNode* componentNode) where T : unmanaged {
+
+        var node = (AtkResNode*)atkNode;
+        if (node == null) return;
+        
+        if (node->ParentNode->ChildNode == node) {
+            node->ParentNode->ChildNode = node->NextSiblingNode;
+        }
+
+        if (node->NextSiblingNode != null && node->NextSiblingNode->PrevSiblingNode == node) {
+            node->NextSiblingNode->PrevSiblingNode = node->PrevSiblingNode;
+        }
+
+        if (node->PrevSiblingNode != null && node->PrevSiblingNode->NextSiblingNode == node) {
+            node->PrevSiblingNode->NextSiblingNode = node->NextSiblingNode;
+        }
+        
+        componentNode->Component->UldManager.UpdateDrawNodeList();
+    }
     
     public static void UnlinkAndFreeImageNode(AtkImageNode* node, AtkUnitBase* parent)
     {
@@ -175,7 +195,7 @@ public static unsafe partial class UiHelper
         return false;
     }
     
-    public static bool TryMakeImageNode(uint id, short resNodeFlags, uint resNodeDrawFlags, byte wrapMode, byte imageNodeFlags, [NotNullWhen(true)] out AtkImageNode* imageNode)
+    public static bool TryMakeImageNode(uint id, NodeFlags resNodeFlags, uint resNodeDrawFlags, byte wrapMode, byte imageNodeFlags, [NotNullWhen(true)] out AtkImageNode* imageNode)
     {
         imageNode = IMemorySpace.GetUISpace()->Create<AtkImageNode>();
 
@@ -183,7 +203,7 @@ public static unsafe partial class UiHelper
         {
             imageNode->AtkResNode.Type = NodeType.Image;
             imageNode->AtkResNode.NodeID = id;
-            imageNode->AtkResNode.Flags = resNodeFlags;
+            imageNode->AtkResNode.NodeFlags = resNodeFlags;
             imageNode->AtkResNode.DrawFlags = resNodeDrawFlags;
             imageNode->WrapMode = wrapMode;
             imageNode->Flags = imageNodeFlags;

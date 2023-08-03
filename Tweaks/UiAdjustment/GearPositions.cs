@@ -9,11 +9,6 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
     public override string Name => "Adjust Equipment Positions";
     public override string Description => "Repositions equipment positions in character menu and inspect to give a less gross layout.";
 
-    private delegate void* AddonOnSetup(AtkUnitBase* atkUnitBase, int a2, void* a3);
-
-    private HookWrapper<AddonOnSetup> characterOnSetup;
-    private HookWrapper<AddonOnSetup> pvpCharacterOnSetup;
-    private HookWrapper<AddonOnSetup> inspectOnSetup;
     private HookWrapper<Common.AddonOnUpdate> bagWidgetUpdate;
     
     private delegate byte AddonControllerInput(AtkUnitBase* atkUnitBase, Dir a2, byte a3);
@@ -24,7 +19,7 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
         base.Setup();
     }
 
-    public override void Enable() {
+    protected override void Enable() {
         bagWidgetUpdate ??= Common.HookAfterAddonUpdate("48 89 5C 24 ?? 55 56 57 41 54 41 55 41 56 41 57 48 83 EC 20 4C 8B 62 38", BagWidgetUpdate);
         bagWidgetUpdate?.Enable();
         
@@ -241,7 +236,7 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
                     bgImageNode = IMemorySpace.GetUISpace()->Create<AtkImageNode>();
                     bgImageNode->AtkResNode.Type = NodeType.Image;
                     bgImageNode->AtkResNode.NodeID = CustomNodes.GearPositionsBg + i;
-                    bgImageNode->AtkResNode.Flags = (short)(NodeFlags.AnchorTop | NodeFlags.AnchorLeft);
+                    bgImageNode->AtkResNode.NodeFlags = NodeFlags.AnchorTop | NodeFlags.AnchorLeft;
                     bgImageNode->AtkResNode.DrawFlags = 0;
                     bgImageNode->WrapMode = 1;
                     bgImageNode->Flags = 0;
@@ -455,7 +450,7 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
         node->SetPositionFloat(x, y);
     }
 
-    public override void Disable() {
+    protected override void Disable() {
         var bagWidget = Common.GetUnitBase("_BagWidget");
         if (bagWidget != null) ResetBagWidget(bagWidget);
         bagWidgetUpdate?.Disable();

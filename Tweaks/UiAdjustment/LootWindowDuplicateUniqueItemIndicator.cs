@@ -68,11 +68,10 @@ public unsafe class LootWindowDuplicateUniqueItemIndicator : UiAdjustments.SubTw
         AddChangelog("1.8.3.0", "Added 'Lock Loot Window' feature.");
         AddChangelog("1.8.6.0", "Removed Window Lock Feature, 'Lock Window Position' tweak has returned.");
         
-        SignatureHelper.Initialise(this);
         Ready = true;
     }
 
-    public override void Enable()
+    protected override void Enable()
     {
         TweakConfig = LoadConfig<Config>() ?? new Config();
         
@@ -82,7 +81,7 @@ public unsafe class LootWindowDuplicateUniqueItemIndicator : UiAdjustments.SubTw
         base.Enable();
     }
 
-    public override void Disable()
+    protected override void Disable()
     {
         SaveConfig(TweakConfig);
         
@@ -166,7 +165,7 @@ public unsafe class LootWindowDuplicateUniqueItemIndicator : UiAdjustments.SubTw
             if (listComponentNode is null || listComponentNode->Component is null) return result;
             
             // For each possible item slot, get the item info
-            foreach (var index in Enumerable.Range(0, 32))
+            foreach (var index in Enumerable.Range(0, 16))
             {
                 // If this data slot doesn't have an item id, skip.
                 var itemInfo = callingAddon->ItemsSpan[index];
@@ -249,7 +248,7 @@ public unsafe class LootWindowDuplicateUniqueItemIndicator : UiAdjustments.SubTw
     private void MakeCrossNode(uint nodeId, AtkComponentNode* parent)
     {
         var imageNode = UiHelper.MakeImageNode(nodeId, new UiHelper.PartInfo(0, 0, 32, 32));
-        imageNode->AtkResNode.Flags = 8243;
+        imageNode->AtkResNode.NodeFlags = NodeFlags.AnchorLeft | NodeFlags.AnchorTop | NodeFlags.Visible | NodeFlags.Enabled | NodeFlags.EmitsEvents; // 8243;
         imageNode->WrapMode = 1;
 
         imageNode->LoadIconTexture(61502, 0);
@@ -268,7 +267,7 @@ public unsafe class LootWindowDuplicateUniqueItemIndicator : UiAdjustments.SubTw
     private void MakePadlockNode(uint nodeId, AtkComponentNode* parent)
     {
         var imageNode = UiHelper.MakeImageNode(nodeId, new UiHelper.PartInfo(48, 0, 20, 24));
-        imageNode->AtkResNode.Flags = 8243;
+        imageNode->AtkResNode.NodeFlags = NodeFlags.AnchorLeft | NodeFlags.AnchorTop | NodeFlags.Visible | NodeFlags.Enabled | NodeFlags.EmitsEvents; // 8243;
         imageNode->WrapMode = 1;
 
         imageNode->LoadTexture("ui/uld/ActionBar_hr1.tex");

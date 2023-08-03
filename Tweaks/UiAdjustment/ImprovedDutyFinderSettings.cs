@@ -31,14 +31,14 @@ public unsafe class ImprovedDutyFinderSettings : UiAdjustments.SubTweak {
         base.Setup();
     }
 
-    public override void Enable() {
+    protected override void Enable() {
         setContentsFinderSettings = (delegate* unmanaged<byte*, nint, void>) Service.SigScanner.ScanText("E8 ?? ?? ?? ?? 48 8B 07 33 F6");
         this.LoadIcons();
         Service.PluginInterface.UiBuilder.Draw += this.OnDraw;
         base.Enable();
     }
 
-    public override void Disable() {
+    protected override void Disable() {
         Service.PluginInterface.UiBuilder.Draw -= this.OnDraw;
         this.DisposeIcons();
         var addon = (AtkUnitBase*)Service.GameGui.GetAddonByName("ContentsFinder");
@@ -113,12 +113,12 @@ public unsafe class ImprovedDutyFinderSettings : UiAdjustments.SubTweak {
     private static byte GetCurrentSettingValue(DutyFinderSetting dutyFinderSetting) {
         var contentsFinder = ContentsFinder.Instance();
         return dutyFinderSetting switch {
-            DutyFinderSetting.Ja => (byte)GameConfig.UiConfig.GetUInt("ContentsFinderUseLangTypeJA"),
-            DutyFinderSetting.En => (byte)GameConfig.UiConfig.GetUInt("ContentsFinderUseLangTypeEN"),
-            DutyFinderSetting.De => (byte)GameConfig.UiConfig.GetUInt("ContentsFinderUseLangTypeDE"),
-            DutyFinderSetting.Fr => (byte)GameConfig.UiConfig.GetUInt("ContentsFinderUseLangTypeFR"),
+            DutyFinderSetting.Ja => (byte)Service.GameConfig.UiConfig.GetUInt("ContentsFinderUseLangTypeJA"),
+            DutyFinderSetting.En => (byte)Service.GameConfig.UiConfig.GetUInt("ContentsFinderUseLangTypeEN"),
+            DutyFinderSetting.De => (byte)Service.GameConfig.UiConfig.GetUInt("ContentsFinderUseLangTypeDE"),
+            DutyFinderSetting.Fr => (byte)Service.GameConfig.UiConfig.GetUInt("ContentsFinderUseLangTypeFR"),
             DutyFinderSetting.LootRule => (byte)contentsFinder->LootRules,
-            DutyFinderSetting.JoinPartyInProgress => (byte)GameConfig.UiConfig.GetUInt("ContentsFinderSupplyEnable"),
+            DutyFinderSetting.JoinPartyInProgress => (byte)Service.GameConfig.UiConfig.GetUInt("ContentsFinderSupplyEnable"),
             DutyFinderSetting.UnrestrictedParty => *(byte*)&contentsFinder->IsUnrestrictedParty,
             DutyFinderSetting.LevelSync => *(byte*)&contentsFinder->IsLevelSync,
             DutyFinderSetting.MinimumIl => *(byte*)&contentsFinder->IsMinimalIL,
