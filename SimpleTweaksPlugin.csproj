@@ -4,7 +4,7 @@
         <TargetFramework>net7.0-windows</TargetFramework>
         <LangVersion>preview</LangVersion>
         <Platforms>x64</Platforms>
-        <Configurations>Debug;Release;Private</Configurations>
+        <Configurations>Debug;Release</Configurations>
     </PropertyGroup>
     <PropertyGroup Label="Build">
         <NoWarn>CS8632</NoWarn>
@@ -54,10 +54,8 @@
 		<Reference Include="FFXIVClientStructs">
 			<Private Condition="'$(Configuration)' == 'Debug'">true</Private>
 			<Private Condition="'$(Configuration)' == 'Release'">false</Private>
-			<Private Condition="'$(Configuration)'=='Private'">false</Private>
 			<HintPath Condition="'$(Configuration)' == 'Debug'">$(ProjectDir)\lib\FFXIVClientStructs\bin\$(ConfigurationName)\FFXIVClientStructs.dll</HintPath>
 			<HintPath Condition="'$(Configuration)' == 'Release'">$(DalamudLibPath)\FFXIVClientStructs.dll</HintPath>
-			<HintPath Condition="'$(Configuration)'=='Private'">$(DalamudLibPath)\FFXIVClientStructs.dll</HintPath>
 		</Reference>
         <Reference Include="Newtonsoft.Json">
             <Private>false</Private>
