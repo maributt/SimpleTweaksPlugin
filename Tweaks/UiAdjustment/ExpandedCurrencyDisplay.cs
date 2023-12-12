@@ -1,15 +1,19 @@
-﻿#nullable enable
+#nullable enable
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
+using Dalamud;
 using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
+using Dalamud.Interface.Utility;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Client.System.Memory;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
 using Lumina.Excel.GeneratedSheets;
@@ -33,6 +37,7 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
         public int GridSize = 2;
         public float[] GridSpacing = Array.Empty<float>();
         public Direction GridGrowth = Direction.Left;
+        public bool DisableEvents;
     }
     
     public class CurrencyEntry
@@ -89,6 +94,8 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
     private delegate void* HudLayoutChangeDelegate(void* a1, uint a2, byte a3, byte a4);
     private HookWrapper<HudLayoutChangeDelegate>? hudLayoutChangeHook;
 
+    private delegate void* UnitBaseUpdatePosition(AtkUnitBase* unitBase);
+    private HookWrapper<UnitBaseUpdatePosition>? updatePositionHook;
 
     public override void Setup() {
         AddChangelogNewTweak("1.8.3.0");
@@ -100,6 +107,8 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
         AddChangelog("1.8.8.0", "Added tooltips when mouse is over the currency icons.");
         AddChangelog("1.8.8.1", "Attempting to avoid gil addon getting thrown around when layout changes.");
         AddChangelog("1.8.8.2", "Fixed positioning of gil display moving when scale is anything other than 100%");
+        AddChangelog("1.9.0.0", "Added an option to disable tooltips.");
+        AddChangelog("1.9.0.0", "Fixed currency window positioning breaking when resizing game window.");
         base.Setup();
     }
 
@@ -120,12 +129,29 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
         hudLayoutChangeHook ??= Common.Hook<HudLayoutChangeDelegate>("E8 ?? ?? ?? ?? 33 C0 EB 15 ", OnHudLayoutChange);
         hudLayoutChangeHook?.Enable();
 
+        updatePositionHook ??= Common.Hook<UnitBaseUpdatePosition>("E8 ?? ?? ?? ?? 48 8B 03 41 B9 ?? ?? ?? ?? 45 33 C0 41 0F B6 D1 48 8B CB FF 50 30 48 8B CB", UpdatePositionDetour);
+        updatePositionHook?.Enable();
+
         var agent = Framework.Instance()->GetUiModule()->GetAgentModule()->GetAgentHudLayout();
         if (!agent->AgentInterface.IsAgentActive()) {
             Common.FrameworkUpdate += OnFrameworkUpdate;
         }
         
         base.Enable();
+    }
+
+    private void* UpdatePositionDetour(AtkUnitBase* unitBase) {
+        try {
+            if (unitBase->Name[0] == '_') {
+                var name = Common.ReadString(unitBase->Name, 0x20);
+                if (name == "_Money") FreeAllNodes();
+            }
+        } catch (Exception ex) {
+            SimpleLog.Error(ex);
+        }
+        
+
+        return updatePositionHook!.Original(unitBase);
     }
 
     private void* OnOpenHudLayout(AgentHudLayout* agent) {
@@ -165,6 +191,7 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
         openHudLayoutHook?.Disable();
         closeHudLayoutHook?.Disable();
         hudLayoutChangeHook?.Disable();
+        updatePositionHook?.Disable();
         simpleEvent?.Dispose();
         SaveConfig(TweakConfig);
         Common.FrameworkUpdate -= OnFrameworkUpdate;
@@ -176,6 +203,7 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
         openHudLayoutHook?.Dispose();
         closeHudLayoutHook?.Dispose();
         hudLayoutChangeHook?.Dispose();
+        updatePositionHook?.Dispose();
         base.Dispose();
     }
 
@@ -238,8 +266,6 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
     private void OnFrameworkUpdate()
     {
         if (!UiHelper.IsAddonReady(AddonMoney)) return;
-        using var _ = PerformanceMonitor.Run();
-
         
         // Button Component Node
         var currencyPositionNode = Common.GetNodeByID(&AddonMoney->UldManager, 3);
@@ -257,13 +283,15 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
         var resNodeSize = new Vector2(156, 36); // Hardcode it so we can change things
         
         // Resize Addon for Events
-        AddonMoney->RootNode->SetHeight(1000);
-        AddonMoney->RootNode->SetWidth(1000);
-        AddonMoney->RootNode->SetPositionFloat(AddonMoney->X - 500 * AddonMoney->GetScale() * AddonMoney->RootNode->ScaleX, AddonMoney->Y - 500 * AddonMoney->GetScale() * AddonMoney->RootNode->ScaleY);
+        if (!TweakConfig.DisableEvents) {
+            AddonMoney->RootNode->SetHeight(1000);
+            AddonMoney->RootNode->SetWidth(1000);
+            AddonMoney->RootNode->SetPositionFloat(AddonMoney->X - 500 * AddonMoney->GetScale() * AddonMoney->RootNode->ScaleX, AddonMoney->Y - 500 * AddonMoney->GetScale() * AddonMoney->RootNode->ScaleY);
         
-        currencyPositionNode->SetPositionFloat(620, 500);
-        counterPositionNode->AtkResNode.SetPositionFloat(500, 508);
-
+            currencyPositionNode->SetPositionFloat(620, 500);
+            counterPositionNode->AtkResNode.SetPositionFloat(500, 508);
+        }
+        
         var gridIndex = 0U;
         
         // Make all counter nodes first, because if a icon node overlaps it even slightly it'll hide itself.
@@ -330,6 +358,13 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
     }
 
     private void DrawGridConfig() {
+
+        if (ImGui.Checkbox("Disable Interaction", ref TweakConfig.DisableEvents)) {
+            SaveConfig(TweakConfig);
+            FreeAllNodes();
+        }
+        ImGui.SameLine();
+        ImGuiComponents.HelpMarker("Disables tooltips for currency icons. \n - Should also help if you have issues with the UI moving unexpectedly.");
 
         ImGui.Checkbox("Use Grid Layout", ref TweakConfig.Grid);
 
@@ -611,7 +646,12 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
         var counterNode = (AtkCounterNode*) Common.GetNodeByID(&AddonMoney->UldManager, nodeId);
         if (counterNode is not null)
         {
-            counterNode->SetText(newCount.ToString("n0", Plugin.Culture));
+            var numString = newCount.ToString("n0", CultureInfo.InvariantCulture);
+            counterNode->SetText(Service.ClientState.ClientLanguage switch {
+                ClientLanguage.German => numString.Replace(',', '.'),
+                ClientLanguage.French => numString.Replace(',', ' '),
+                _ => numString
+            });
         }
     }
     
@@ -657,7 +697,7 @@ public unsafe class ExpandedCurrencyDisplay : UiAdjustments.SubTweak
         
         UiHelper.LinkNodeAtEnd((AtkResNode*) imageNode, AddonMoney);
 
-        if (tooltipText != null && simpleEvent != null) {
+        if (!TweakConfig.DisableEvents && tooltipText != null && simpleEvent != null) {
             imageNode->AtkResNode.NodeFlags |= NodeFlags.RespondToMouse | NodeFlags.EmitsEvents | NodeFlags.HasCollision;
             AddonMoney->UpdateCollisionNodeList(false);
             simpleEvent?.Add(AddonMoney, &imageNode->AtkResNode, AtkEventType.MouseOver);

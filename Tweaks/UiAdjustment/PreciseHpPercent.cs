@@ -4,7 +4,9 @@ using System.Globalization;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Hooking;
+using Dalamud.IoC;
 using Dalamud.Logging;
+using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
 using SimpleTweaksPlugin.Tweaks.UiAdjustment;
@@ -24,6 +26,8 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment
 {
     public unsafe class PreciseHpPercent : UiAdjustments.SubTweak
     {
+        [PluginService] private static IGameInteropProvider GameInteropProvider { get; set; } = null!;
+
         public class Configs : TweakConfig
         {
             [TweakConfigOption("Decimal precision", "precision")]
@@ -103,16 +107,41 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment
         const float CommaOffset = 3f;
         const float SingleNumberOffset = 9f;
 
-        public HookWrapper<Common.AddonOnUpdate> TargetInfoUpdateHook;
-        public HookWrapper<Common.AddonOnUpdate> TargetInfoMainTargetUpdateHook;
-        public HookWrapper<Common.AddonOnUpdate> FocusTargetInfoUpdateHook;
+        // extracted from Common from an earlier commit
+        public delegate void* AddonOnUpdate(AtkUnitBase* atkUnitBase, NumberArrayData** nums, StringArrayData** strings);
+        public delegate void NoReturnAddonOnUpdate(AtkUnitBase* atkUnitBase, NumberArrayData** numberArrayData, StringArrayData** stringArrayData);
+        public static HookWrapper<AddonOnUpdate> HookAfterAddonUpdate(IntPtr address, NoReturnAddonOnUpdate after)
+        {
+            Hook<AddonOnUpdate> hook = null;
+            hook = GameInteropProvider.HookFromAddress<AddonOnUpdate>(address, (atkUnitBase, nums, strings) => {
+                var retVal = hook.Original(atkUnitBase, nums, strings);
+                try
+                {
+                    after(atkUnitBase, nums, strings);
+                }
+                catch (Exception ex)
+                {
+                    SimpleLog.Error(ex);
+                    hook.Disable();
+                }
+                return retVal;
+            });
+            var wh = new HookWrapper<AddonOnUpdate>(hook);
+            return wh;
+        }
+        public static HookWrapper<AddonOnUpdate> HookAfterAddonUpdate(void* address, NoReturnAddonOnUpdate after) => HookAfterAddonUpdate(new IntPtr(address), after);
+        public static HookWrapper<AddonOnUpdate> HookAfterAddonUpdate(string signature, NoReturnAddonOnUpdate after, int addressOffset = 0) => HookAfterAddonUpdate(Service.SigScanner.ScanText(signature) + addressOffset, after);
+        public static HookWrapper<AddonOnUpdate> HookAfterAddonUpdate(AtkUnitBase* atkUnitBase, NoReturnAddonOnUpdate after) => HookAfterAddonUpdate(atkUnitBase->AtkEventListener.vfunc[46], after);
+        public HookWrapper<AddonOnUpdate> TargetInfoUpdateHook;
+        public HookWrapper<AddonOnUpdate> TargetInfoMainTargetUpdateHook;
+        public HookWrapper<AddonOnUpdate> FocusTargetInfoUpdateHook;
 
-        public override void Enable()
+        protected override void Enable()
         {
             Config = LoadConfig<Configs>() ?? new Configs();
-            TargetInfoUpdateHook = Common.HookAfterAddonUpdate(TargetInfoOnRequestedUpdate, TargetInfoUpdate);
-            TargetInfoMainTargetUpdateHook = Common.HookAfterAddonUpdate(TargetInfoMainTargetOnRequestedUpdate, TargetInfoMainTargetUpdate);
-            FocusTargetInfoUpdateHook = Common.HookAfterAddonUpdate(FocusTargetInfoOnRequestedUpdate, FocusTargetInfoUpdate);
+            TargetInfoUpdateHook = HookAfterAddonUpdate(TargetInfoOnRequestedUpdate, TargetInfoUpdate);
+            TargetInfoMainTargetUpdateHook = HookAfterAddonUpdate(TargetInfoMainTargetOnRequestedUpdate, TargetInfoMainTargetUpdate);
+            FocusTargetInfoUpdateHook = HookAfterAddonUpdate(FocusTargetInfoOnRequestedUpdate, FocusTargetInfoUpdate);
             //FocusTargetInfoUpdateHook = Common.HookAfterAddonUpdate(FocusTargetInfoOnRequestedUpdate, FocusTargetUpdate);
             TargetInfoUpdateHook.Enable();
             TargetInfoMainTargetUpdateHook.Enable();
@@ -121,7 +150,7 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment
             base.Enable();
         }
 
-        public override void Disable()
+        protected override void Disable()
         {
             SaveConfig(Config);
             TargetInfoUpdateHook.Disable();

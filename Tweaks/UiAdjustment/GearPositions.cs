@@ -1,44 +1,40 @@
-﻿using FFXIVClientStructs.FFXIV.Component.GUI;
+using System;
+using System.Diagnostics.CodeAnalysis;
+using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using FFXIVClientStructs.FFXIV.Client.System.Memory;
-using FFXIVClientStructs.FFXIV.Client.UI.Misc;
+using FFXIVClientStructs.FFXIV.Component.GUI;
+using SimpleTweaksPlugin.Events;
+using SimpleTweaksPlugin.TweakSystem;
 using SimpleTweaksPlugin.Utility;
 
 namespace SimpleTweaksPlugin.Tweaks.UiAdjustment; 
 
+[Changelog("1.8.1.1", "Fixed widget display when using standard UI quality.")]
+[Changelog("1.9.0.0", "Improved gamepad navigation on Character window.")]
+[Changelog("1.9.1.0", "Further improved gamepad navigation on Character window.")]
 public unsafe class GearPositions : UiAdjustments.SubTweak {
     public override string Name => "Adjust Equipment Positions";
     public override string Description => "Repositions equipment positions in character menu and inspect to give a less gross layout.";
 
-    private HookWrapper<Common.AddonOnUpdate> bagWidgetUpdate;
-    
     private delegate byte AddonControllerInput(AtkUnitBase* atkUnitBase, Dir a2, byte a3);
     private HookWrapper<AddonControllerInput> addonControllerInputHook;
 
-    public override void Setup() {
-        AddChangelog("1.8.1.1", "Fixed widget display when using standard UI quality.");
-        base.Setup();
-    }
-
     protected override void Enable() {
-        bagWidgetUpdate ??= Common.HookAfterAddonUpdate("48 89 5C 24 ?? 55 56 57 41 54 41 55 41 56 41 57 48 83 EC 20 4C 8B 62 38", BagWidgetUpdate);
-        bagWidgetUpdate?.Enable();
-        
-        Common.AddonSetup += OnAddonSetup;
         addonControllerInputHook ??= Common.Hook<AddonControllerInput>("E8 ?? ?? ?? ?? EB B0 CC", ControllerInputDetour);
         addonControllerInputHook?.Enable();
 
         var bagWidget = Common.GetUnitBase("_BagWidget");
-        if (bagWidget != null) BagWidgetUpdate(bagWidget, null, null);
+        if (bagWidget != null) BagWidgetUpdate(bagWidget);
 
         base.Enable();
     }
 
-    private void OnAddonSetup(SetupAddonArgs obj) {
+    private void OnAddonSetup(AddonSetupArgs obj) {
         switch (obj.AddonName) {
-            case "Character": CharacterOnSetup(obj.Addon); break;
-            case "PvPCharacter": PvpCharacterOnSetup(obj.Addon); break;
-            case "CharacterInspect": InspectOnSetup(obj.Addon); break;
-            case "ArmouryBoard": ArmouryBoardOnSetup(obj.Addon); break;
+            case "Character": CharacterOnSetup((AtkUnitBase*)obj.Addon); break;
+            case "PvPCharacter": PvpCharacterOnSetup((AtkUnitBase*)obj.Addon); break;
+            case "CharacterInspect": InspectOnSetup((AtkUnitBase*)obj.Addon); break;
+            case "ArmouryBoard": ArmouryBoardOnSetup((AtkUnitBase*)obj.Addon); break;
         }
     }
 
@@ -98,7 +94,47 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
         SoulCrystal = 18,
 
         ResetDisplay = 20
+    }
 
+    private enum CharacterStatusNode {
+        None = -1,
+        Intelligence = 3,
+        Mind = 4,
+        
+        Defense = 8,
+        MagicDefense = 9,
+        
+        AttackMagicPotency = 12,
+        HealingMagicPotency = 13,
+        SpellSpeed = 14,
+        
+        AverageItemLevel = 19,
+        Tenacity = 20,
+        Piety = 21
+    }
+
+    private enum CharacterProfileNode {
+        GrandCompany = 1,
+    }
+
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
+    private enum CharacterClassNode {
+        WHM = 5,
+        SCH = 6,
+        AST = 7,
+        SGE = 8,
+        
+        BRD = 14,
+        MCH = 15,
+        DNC = 16,
+        BLM = 17,
+        SMN = 18,
+        RDM = 19,
+        BLU = 20,
+    }
+
+    private enum CharacterReputeNode {
+        Commend = 0,
     }
 
     private int GetCollisionNodeIndex(AtkUnitBase* atkUnitBase) {
@@ -110,30 +146,70 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
         return -1;
     }
     
+    private byte F(params Enum[] t){
+        byte FocusNode(AtkUnitBase* atkUnitBase, int node) {
+            if (node < 0 || node >= atkUnitBase->CollisionNodeListCount) return 1;
+            atkUnitBase->SetFocusNode(atkUnitBase->CollisionNodeList[node]);
+            atkUnitBase->CursorTarget = atkUnitBase->CollisionNodeList[node];
+            return 1;
+        }
+
+        foreach (var e in t) {
+            switch (e) {
+                case CharacterNode node when Common.GetUnitBase("Character", out var unitBase): return FocusNode(unitBase, (int)node);
+                case CharacterStatusNode node when Common.GetUnitBase("CharacterStatus", out var unitBase): return FocusNode(unitBase, (int)node);
+                case CharacterInspectNode node when Common.GetUnitBase("CharacterInspect", out var unitBase): return FocusNode(unitBase, (int)node);
+                case CharacterProfileNode node when Common.GetUnitBase("CharacterProfile", out var unitBase): return FocusNode(unitBase, (int)node);
+                case CharacterClassNode node when Common.GetUnitBase("CharacterClass", out var unitBase): return FocusNode(unitBase, (int)node);
+                case CharacterReputeNode node when Common.GetUnitBase("CharacterRepute", out var unitBase): return FocusNode(unitBase, (int)node);
+            }
+        }
+        return 1;
+    }
+    
+
     private byte ControllerInputDetour(AtkUnitBase* atkUnitBase, Dir d, byte a3) {
+        var name = Common.ReadString(atkUnitBase->Name, 0x20);
+#if DEBUG
+        SimpleLog.Verbose($"{name}, {GetCollisionNodeIndex(atkUnitBase)}, {d}");
+#endif
         try {
+            if (atkUnitBase == Common.GetUnitBase("CharacterStatus")) {
+                var currentSelectedNodeIndex = (CharacterStatusNode)GetCollisionNodeIndex(atkUnitBase);
+                return currentSelectedNodeIndex switch {
+                    CharacterStatusNode.Intelligence when d == Dir.Right => F(CharacterNode.SoulCrystal),
+                    CharacterStatusNode.Mind when d == Dir.Right => F(CharacterNode.MainHand),
+                    CharacterStatusNode.Defense when d == Dir.Right => F(CharacterNode.Head),
+                    CharacterStatusNode.MagicDefense when d == Dir.Right => F(CharacterNode.Body),
+                    CharacterStatusNode.AttackMagicPotency when d == Dir.Right => F(CharacterNode.Hands),
+                    CharacterStatusNode.HealingMagicPotency when d == Dir.Right => F(CharacterNode.Hands),
+                    CharacterStatusNode.SpellSpeed when d == Dir.Right => F(CharacterNode.Legs),
+                    CharacterStatusNode.Tenacity when d == Dir.Right => F(CharacterNode.Feet),
+                    CharacterStatusNode.Piety when d == Dir.Right => F(CharacterNode.Feet),
+                    CharacterStatusNode.AverageItemLevel when d == Dir.Left => F(CharacterNode.FingerLeft),
+                    _ => addonControllerInputHook.Original(atkUnitBase, d, a3)
+                };
+            }
+
             if (atkUnitBase == Common.GetUnitBase("Character")) {
-
                 var currentSelectedNodeIndex = (CharacterNode)GetCollisionNodeIndex(atkUnitBase);
-
-                byte F(CharacterNode node) {
-                    if ((int)node < 0 || (int)node >= atkUnitBase->CollisionNodeListCount) return 1;
-                    atkUnitBase->SetFocusNode(atkUnitBase->CollisionNodeList[(int)node]);
-                    atkUnitBase->CursorTarget = atkUnitBase->CollisionNodeList[(int)node];
-                    return 1;
-                }
-
                 return currentSelectedNodeIndex switch {
                     CharacterNode.SoulCrystal when d == Dir.Right => F(CharacterNode.OffHand),
                     CharacterNode.SoulCrystal when d == Dir.Down => F(CharacterNode.MainHand),
                     CharacterNode.SoulCrystal when d == Dir.Up => F(CharacterNode.GearSetList),
-                    CharacterNode.SoulCrystal when d == Dir.Left => F(CharacterNode.MainHand),
+                    CharacterNode.SoulCrystal when d == Dir.Left => F(CharacterStatusNode.Intelligence, CharacterProfileNode.GrandCompany, CharacterClassNode.WHM, CharacterReputeNode.Commend),
                     CharacterNode.MainHand when d == Dir.Up => F(CharacterNode.SoulCrystal),
+                    CharacterNode.MainHand when d == Dir.Left => F(CharacterStatusNode.Mind, CharacterProfileNode.GrandCompany, CharacterClassNode.AST, CharacterReputeNode.Commend),
                     CharacterNode.Head when d == Dir.Right => F(CharacterNode.Ears),
+                    CharacterNode.Head when d == Dir.Left => F(CharacterStatusNode.Defense, CharacterProfileNode.GrandCompany, CharacterClassNode.SGE, CharacterReputeNode.Commend),
                     CharacterNode.Body when d == Dir.Right => F(CharacterNode.Neck),
+                    CharacterNode.Body when d == Dir.Left => F(CharacterStatusNode.MagicDefense, CharacterProfileNode.GrandCompany, CharacterClassNode.BRD, CharacterReputeNode.Commend),
                     CharacterNode.Hands when d == Dir.Right => F(CharacterNode.Wrist),
+                    CharacterNode.Hands when d == Dir.Left => F(CharacterStatusNode.AttackMagicPotency, CharacterProfileNode.GrandCompany, CharacterClassNode.MCH, CharacterReputeNode.Commend),
                     CharacterNode.Legs when d == Dir.Right => F(CharacterNode.FingerRight),
+                    CharacterNode.Legs when d == Dir.Left => F(CharacterStatusNode.SpellSpeed, CharacterProfileNode.GrandCompany, CharacterClassNode.DNC, CharacterReputeNode.Commend),
                     CharacterNode.Feet when d == Dir.Right => F(CharacterNode.FingerLeft),
+                    CharacterNode.Feet when d == Dir.Left => F(CharacterStatusNode.Tenacity, CharacterProfileNode.GrandCompany, CharacterClassNode.BLM, CharacterReputeNode.Commend),
                     CharacterNode.OffHand when d == Dir.Left => F(CharacterNode.MainHand),
                     CharacterNode.Ears when d == Dir.Left => F(CharacterNode.Head),
                     CharacterNode.Neck when d == Dir.Left => F(CharacterNode.Body),
@@ -147,15 +223,10 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
                     _ => addonControllerInputHook.Original(atkUnitBase, d, a3)
                 };
 
-            } else if (atkUnitBase == Common.GetUnitBase("CharacterInspect")) {
-                var currentSelectedNodeIndex = (CharacterInspectNode)GetCollisionNodeIndex(atkUnitBase);
+            }
 
-                byte F(CharacterInspectNode node) {
-                    if ((int)node < 0 || (int)node >= atkUnitBase->CollisionNodeListCount) return 1;
-                    atkUnitBase->SetFocusNode(atkUnitBase->CollisionNodeList[(int)node]);
-                    atkUnitBase->CursorTarget = atkUnitBase->CollisionNodeList[(int)node];
-                    return 1;
-                }
+            if (atkUnitBase == Common.GetUnitBase("CharacterInspect")) {
+                var currentSelectedNodeIndex = (CharacterInspectNode)GetCollisionNodeIndex(atkUnitBase);
                 return currentSelectedNodeIndex switch {
                     CharacterInspectNode.SearchInfo when d == Dir.Down => F(CharacterInspectNode.SoulCrystal),
                     CharacterInspectNode.SoulCrystal when d == Dir.Up => F(CharacterInspectNode.SearchInfo),
@@ -198,16 +269,50 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
                     CharacterInspectNode.ResetDisplay when d == Dir.Up => F(CharacterInspectNode.FingerLeft),
                     _ => addonControllerInputHook.Original(atkUnitBase, d, a3)
                 };
-
-            } else {
-                return addonControllerInputHook.Original(atkUnitBase, d, a3);
             }
+
+            if (atkUnitBase == Common.GetUnitBase("CharacterClass")) {
+                var currentSelectedNodeIndex = (CharacterClassNode)GetCollisionNodeIndex(atkUnitBase);
+                return currentSelectedNodeIndex switch {
+                    CharacterClassNode.WHM when d == Dir.Right => F(CharacterNode.SoulCrystal),
+                    CharacterClassNode.SCH when d == Dir.Right => F(CharacterNode.MainHand),
+                    CharacterClassNode.AST when d == Dir.Right => F(CharacterNode.MainHand),
+                    CharacterClassNode.SGE when d == Dir.Right => F(CharacterNode.Head),
+                    CharacterClassNode.BRD when d == Dir.Right => F(CharacterNode.Body),
+                    CharacterClassNode.MCH when d == Dir.Right => F(CharacterNode.Hands),
+                    CharacterClassNode.DNC when d == Dir.Right => F(CharacterNode.Legs),
+                    CharacterClassNode.BLM when d == Dir.Right => F(CharacterNode.Feet),
+                    CharacterClassNode.SMN when d == Dir.Right => F(CharacterNode.Feet),
+                    CharacterClassNode.RDM when d == Dir.Right => F(CharacterNode.Feet),
+                    CharacterClassNode.BLU when d == Dir.Right => F(CharacterNode.Feet),
+                    _ => addonControllerInputHook.Original(atkUnitBase, d, a3)
+                };
+            }
+            
+            if (atkUnitBase == Common.GetUnitBase("CharacterProfile")) {
+                var currentSelectedNodeIndex = (CharacterProfileNode)GetCollisionNodeIndex(atkUnitBase);
+                return currentSelectedNodeIndex switch {
+                    CharacterProfileNode.GrandCompany when d == Dir.Right => F(CharacterNode.SoulCrystal),
+                    _ => addonControllerInputHook.Original(atkUnitBase, d, a3)
+                };
+            }
+            
+            if (atkUnitBase == Common.GetUnitBase("CharacterRepute")) {
+                var currentSelectedNodeIndex = (CharacterReputeNode)GetCollisionNodeIndex(atkUnitBase);
+                return currentSelectedNodeIndex switch {
+                    CharacterReputeNode.Commend when d == Dir.Right => F(CharacterNode.SoulCrystal),
+                    _ => addonControllerInputHook.Original(atkUnitBase, d, a3)
+                };
+            }
+
+            return addonControllerInputHook.Original(atkUnitBase, d, a3);
         } catch {
             return addonControllerInputHook.Original(atkUnitBase, d, a3);
         }
     }
 
-    private void BagWidgetUpdate(AtkUnitBase* atkUnitBase, NumberArrayData** numberArrayData, StringArrayData** stringArrayData) {
+    [AddonPostRequestedUpdate("_BagWidget")]
+    private void BagWidgetUpdate(AtkUnitBase* atkUnitBase) {
         var equipmentComponentNode = atkUnitBase->GetNodeById(6);
         if (equipmentComponentNode == null) return;
         if ((ushort)equipmentComponentNode->Type < 1000) return;
@@ -337,6 +442,7 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
         }
     }
 
+    [AddonPostSetup("CharacterInspect")]
     private void InspectOnSetup(AtkUnitBase* atkUnitBase) {
         // Slots
         MoveNode(atkUnitBase, 47, 0, -120); // Job Stone
@@ -357,6 +463,7 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
         MoveNode(atkUnitBase, 54, 0, 46 * 5); // Feet
     }
 
+    [AddonPostSetup("Character")]
     private void CharacterOnSetup(AtkUnitBase* atkUnitBase) {
         // Slots
         MoveNode(atkUnitBase, 60, 0, -1); // Job Stone
@@ -385,6 +492,7 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
         MoveNode(atkUnitBase, 26, 18, 321); // Feet
     }
     
+    [AddonPostSetup("PvPCharacter")]
     private void PvpCharacterOnSetup(AtkUnitBase* atkUnitBase) {
         
         // Slots
@@ -453,14 +561,11 @@ public unsafe class GearPositions : UiAdjustments.SubTweak {
     protected override void Disable() {
         var bagWidget = Common.GetUnitBase("_BagWidget");
         if (bagWidget != null) ResetBagWidget(bagWidget);
-        bagWidgetUpdate?.Disable();
         addonControllerInputHook?.Disable();
-        Common.AddonSetup -= OnAddonSetup;
         base.Disable();
     }
 
     public override void Dispose() {
-        bagWidgetUpdate?.Dispose();
         addonControllerInputHook?.Dispose();
         base.Dispose();
     }

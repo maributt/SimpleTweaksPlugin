@@ -1,5 +1,4 @@
 ﻿using System;
-using Dalamud.Game;
 using Dalamud.Game.Config;
 using Dalamud.Interface.Colors;
 using ImGuiNET;
@@ -16,7 +15,7 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment {
         public Configs Config { get; private set; }
 
         protected override DrawConfigDelegate DrawConfigTree => (ref bool hasChanged) => {
-            hasChanged |= ImGui.Checkbox(LocString("HideLogIn", "Hide the login notification."), ref this.Config.HideLogIn);
+            hasChanged |= ImGui.Checkbox(LocString("HideLogIn", "Hide the login notification."), ref Config.HideLogIn);
             
             if (Service.GameConfig.TryGet(UiConfigOption.AchievementAppealLoginDisp, out bool achievementLoginDisplay) && achievementLoginDisplay == false) {
                 ImGui.Indent();
@@ -32,7 +31,7 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment {
                 ImGui.Unindent();
             }
             
-            hasChanged |= ImGui.Checkbox(LocString("HideZoneIn", "Hide the zone-in notification."), ref this.Config.HideZoneIn);
+            hasChanged |= ImGui.Checkbox(LocString("HideZoneIn", "Hide the zone-in notification."), ref Config.HideZoneIn);
         };
 
         public override string Name => "Hide Achievements Nearing Completion Notifications";
@@ -41,23 +40,23 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment {
 
         protected override void Enable() {
             Config = LoadConfig<Configs>() ?? new Configs();
-            Service.Framework.Update += this.HideNotifications;
+            Common.FrameworkUpdate += HideNotifications;
             base.Enable();
         }
 
         protected override void Disable() {
             SaveConfig(Config);
-            Service.Framework.Update -= this.HideNotifications;
+            Common.FrameworkUpdate -= HideNotifications;
             base.Disable();
         }
 
-        private void HideNotifications(Framework framework) {
-            if (this.Config.HideLogIn) {
-                this.HideNotification("_NotificationAchieveLogIn");
+        private void HideNotifications() {
+            if (Config.HideLogIn) {
+                HideNotification("_NotificationAchieveLogIn");
             }
 
-            if (this.Config.HideZoneIn) {
-                this.HideNotification("_NotificationAchieveZoneIn");
+            if (Config.HideZoneIn) {
+                HideNotification("_NotificationAchieveZoneIn");
             }
         }
 
@@ -65,7 +64,7 @@ namespace SimpleTweaksPlugin.Tweaks.UiAdjustment {
             try {
                 var atkUnitBase = Common.GetUnitBase(name);
                 if (atkUnitBase == null || atkUnitBase->IsVisible == false) return;
-                atkUnitBase->Hide(false);
+                atkUnitBase->Hide(false, false, 1);
             } catch (Exception) {
                 // ignore
             }

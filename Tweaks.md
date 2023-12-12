@@ -6,6 +6,11 @@
 
 ---
 
+- **Alt + F4 Exit Game**
+
+  Pressing Alt + F4 will cause the game to close safely.
+
+
 - **Auto Lock Action Bars**
 
   Automatically locks action bars when certain conditions are met.
@@ -23,7 +28,7 @@
 
 - **Character Directory Command**
 
-  Adds a command to open the directory when client side character data is stored.
+  Adds a command to open the directory where client side character data is stored.
 
 
 - **Character Window Job Switcher**
@@ -76,6 +81,16 @@
   Click 'Previous' class icon in Duty Ready window to switch class.
 
 
+- **Duty Timer**
+
+  When completing a duty, tells you how much time the duty took.
+
+
+- **Emote Log Status in Server Bar**
+
+  Show the emote log status in the server bar.
+
+
 - **Emote Log Subcommand**
 
   Adds a 'text' subcommand for emotes when emotelog is disabled.  /yes text
@@ -106,9 +121,14 @@
   Sets a fixed value for the shadow rendering, preventing it from changing when flying.
 
 
+- **Hide 'Character not found' Message**
+
+  Prevent the game from displaying the "The character you last logged out with could not be found on the current data center." message.
+
+
 - **Hide Hotbar Lock**
 
-  Hides the hotbar lock button, with an option to make it visible while holding SHIFT.
+  Hides the hotbar lock button, with an option to make it visible while holding a modifier combo.
 
 
 - **Hide Mouse Cursor After Inactivity**
@@ -119,6 +139,11 @@
 - **House Lights Command**
 
   Adds a command to control lighting in your own housing areas.
+
+
+- **Improved Crafting Log**
+
+  Modifies the Synthesize button in the Crafting Log to switch job or stand up from the crafting position, allowing you to stop crafting without closing the crafting log.
 
 
 - **Increased zoom on character previews.**
@@ -139,6 +164,11 @@
 - **Keyboard Gaming Mode**
 
   Block Alt-Tab and other keys to keep you in the game.
+
+
+- **Leave Duty Command**
+
+  Adds a command to leave the currenty duty. /leaveduty
 
 
 - **Long Veil**
@@ -186,6 +216,11 @@
   Remembers quick gathering status even after gathering at unspoiled nodes.
 
 
+- **Remember Selected World**
+
+  Remembers which world was selected for each datacentre.
+
+
 - **Screenshot File Name**
 
   Change the file name format for screenshots.
@@ -208,7 +243,7 @@
 
 - **Smart Strafe**
 
-  Inteligently switches keyboard controls between strafing and turning.
+  Intelligently switches keyboard controls between strafing and turning.
 
   (Legacy type movement only)
 
@@ -233,6 +268,11 @@
   Show the correct item when trying on a glamoured item.
 
 
+- **Use Custom Time for Furniture Clocks**
+
+  Changes the time displayed on chronometer furniture.
+
+
 ### Chat Tweaks
 
 ---
@@ -240,6 +280,11 @@
 - **Chat Name Colours**
 
   Gives players a random colour in chat, or set the name manually.
+
+
+- **Chat Sounds Everywhere**
+
+  Enables <se.#> chat sounds everywhere, regardless of channel.
 
 
 - **Clickable Links in Chat**
@@ -260,6 +305,11 @@
 - **Disable Chat Movement**
 
   Prevents movement of the chat window.
+
+
+- **Echo Party Finder**
+
+  Prints Party Finder description to chat when joining a group and entering a duty.
 
 
 - **Echo Story Selection**
@@ -304,7 +354,7 @@
 
 - **Sticky Chat**
 
-  Sets chat channel when you use temporary chat messages.
+  Sets the chat channel when you use temporary chat messages.
 
   Example: "/p hello!" will set the chat channel to Party
 
@@ -374,6 +424,11 @@
   ![Show expected food and potion stats Preview](TweakPreviews/TooltipTweaks@FoodStats.png)
 
 
+- **Show Glamour in Item Name**
+
+  Displays the glamoured item name underneath the real item name.
+
+
 - **Show ID**
 
   Show the ID of actions and items on their tooltips.
@@ -393,7 +448,7 @@
 
 - **Track Faded Orchestrion Rolls**
 
-  Adds the collected checkmark to Faded Orchestrion Rolls.
+  Adds the collectable checkmark to Faded Orchestrion Rolls.
 
 
 - **Track Gacha Items**
@@ -422,7 +477,7 @@
 
 - **Always Yes**
 
-  Default cursor to yes when using confirm (num 0).
+  Sets the default action in dialog boxes to yes when using confirm (num 0).
 
 
 - **Auto Focus Recipe Search**
@@ -438,6 +493,11 @@
 - **Cast Bar Adjustments**
 
   Allows hiding or moving specific parts of the castbar.
+
+
+- **Casting Text Visibility**
+
+  Change the font size, color, and background of the casting text.
 
 
 - **Change Map Area Colors**
@@ -477,12 +537,17 @@
 
 - **Duplicate Action Presses Between Hotbars**
 
-  Will show the action press pulse on all hotbar slots with the same ability when you use it.
+  Shows the pulse effect when activating actions, even if they are duplicated between hotbars.
 
 
 - **Duplicate Keybind Hints Between Hotbars**
 
   Will display the keybind hint for any hotbar slot onto unbound slots with the same action.
+
+
+- **Duty List Background**
+
+  Adds a configurable background to the Duty List
 
 
 - **Enhanced Loot Window**
@@ -504,7 +569,12 @@
 
 - **Fade Unavailable Actions**
 
-  Instead of darkening icons, makes them transparent when unavailable
+  Instead of darkening icons, makes them transparent when unavailable.
+
+
+- **Fast Item Search**
+
+  Enable superfast searches for the market board & crafting log.
 
 
 - **Hide Achievements Nearing Completion Notifications**
@@ -534,17 +604,12 @@
 
 - **Hide Unwanted Banners**
 
-  Hide information banners such as 'Venture Complete', or 'Levequest Accepted'
+  Hide information banners such as 'Venture Complete', or 'Levequest Accepted'.
 
 
 - **Housing Lottery Timer**
 
   Show the time remaining until the current lottery period ends in the timers window.
-
-
-- **Improved Crafting Log**
-
-  Modifies the Synthesize button in the Crafting Log to switch job or stand up from the crafting position, allowing you to stop crafting without closing the crafting log.
 
 
 - **Improved Duty Finder Settings**
@@ -554,7 +619,7 @@
 
 - **Improved Interruptable Castbars**
 
-  Displays an icon next to interruptable castbars
+  Displays an icon next to interruptable castbars.
 
 
 - **Item Level in Examine**
@@ -577,6 +642,11 @@
 - **Lock Window Positions**
 
   Allows locking the position of almost any UI window.
+
+
+- **Loot Window Select Next Item**
+
+  Upon pressing 'Need', 'Greed', or 'Pass' automatically select the next loot item.
 
 
 - **Market Enhancements**
@@ -604,6 +674,11 @@
   Reverts the change to nameplates.
 
 
+- **Open Glamour Dresser to Current Job**
+
+  Sets the job selection dropdown to your current job when opening the Glamour Dresser.
+
+
 - **Parameter Bar Adjustments**
 
   Allows hiding or moving specific parts of the parameter bar (HP and mana bars).
@@ -616,7 +691,7 @@
 
 - **Reduced Deep Dungeon Info**
 
-  Removes the redundant infos from the deep dungeon character info.
+  Removes redundant information from the deep dungeon character info.
 
 
 - **Remember Title Sorting**
@@ -637,6 +712,11 @@
 - **Reposition Target Castbar Text**
 
   Moves the text on target castbars to make it easier to read
+
+
+- **Scenario Progression Display**
+
+  Shows the percentage of completion of the main scenario.
 
 
 - **Shield on HP Bar**

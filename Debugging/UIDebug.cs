@@ -1,15 +1,17 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
+using Dalamud.Interface.Utility;
 using Dalamud.Memory;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using FFXIVClientStructs.FFXIV.Component.GUI.ULD;
@@ -130,11 +132,8 @@ public unsafe class UIDebug : DebugHelper {
         
         for (var i = 0; i < UnitListCount; i++) {
             var unitManager = &unitManagers[i];
-            var unitBaseArray = &(unitManager->AtkUnitEntries);
-            for (var j = 0; j < unitManager->Count; j++) {
-                
-                var unitBase = unitBaseArray[j];
-
+            foreach (var j in Enumerable.Range(0, Math.Min(unitManager->Count, unitManager->EntriesSpan.Length))) {
+                var unitBase = unitManager->EntriesSpan[j].Value;
                 if ((ulong)unitBase == address || FindByAddress(unitBase, address)) {
                     selectedUnitBase = unitBase;
                     Plugin.PluginConfig.Debugging.SelectedAtkUnitBase = address;
@@ -354,18 +353,15 @@ public unsafe class UIDebug : DebugHelper {
         var unitManagers = &stage->RaptureAtkUnitManager->AtkUnitManager.DepthLayerOneList;
         for (var i = 0; i < UnitListCount; i++) {
             var unitManager = &unitManagers[i];
-            var unitBaseArray = &(unitManager->AtkUnitEntries);
-
-            for (var j = 0; j < unitManager->Count; j++) {
-                var unitBase = unitBaseArray[j];
-                if (unitBase->RootNode == null) continue;
+            foreach (var j in Enumerable.Range(0, Math.Min(unitManager->Count, unitManager->EntriesSpan.Length))) {
+                var unitBase = unitManager->EntriesSpan[j].Value;
+                if (unitBase == null || unitBase->RootNode == null) continue;
                 if (!(unitBase->IsVisible && unitBase->RootNode->IsVisible)) continue;
                 var addonResult = new AddonResult() {UnitBase = unitBase};
                 if (list.Contains(addonResult)) continue;
                 if (unitBase->X > position.X || unitBase->Y > position.Y) continue;
                 if (unitBase->X + unitBase->RootNode->Width < position.X) continue;
                 if (unitBase->Y + unitBase->RootNode->Height < position.Y) continue;
-
                 addonResult.Nodes = GetAtkResNodeAtPosition(unitBase->UldManager, position);
                 list.Add(addonResult);
             }
@@ -449,7 +445,7 @@ public unsafe class UIDebug : DebugHelper {
             if (atkUnitBase->IsVisible) {
                 atkUnitBase->Flags ^= 0x20;
             } else {
-                atkUnitBase->Show(0);
+                atkUnitBase->Show(false, 0);
             }
         }
             
@@ -796,7 +792,7 @@ public unsafe class UIDebug : DebugHelper {
                         while (b > byte.MaxValue) b -= byte.MaxValue;
                         while (b < byte.MinValue) b += byte.MaxValue;
                         textNode->AlignmentFontType = (byte) b;
-                        textNode->AtkResNode.Flags_2 |= 0x1;
+                        textNode->AtkResNode.DrawFlags |= 0x1;
                     }
                         
                     ImGui.Text($"Color: #{textNode->TextColor.R:X2}{textNode->TextColor.G:X2}{textNode->TextColor.B:X2}{textNode->TextColor.A:X2}");
@@ -846,6 +842,7 @@ public unsafe class UIDebug : DebugHelper {
                             if (texType == TextureType.Resource) {
                                 var texFileNamePtr = textureInfo->AtkTexture.Resource->TexFileResourceHandle->ResourceHandle.FileName;
                                 var texString = Marshal.PtrToStringAnsi(new IntPtr(texFileNamePtr.BufferPtr));
+                                var isHighResolution = texString?.Contains("_hr1") ?? false;
                                 ImGui.Text($"texture path: {texString}");
                                 var kernelTexture = textureInfo->AtkTexture.Resource->KernelTextureObject;
 
@@ -860,7 +857,6 @@ public unsafe class UIDebug : DebugHelper {
                                         ImGui.TableSetupColumn("Switch", ImGuiTableColumnFlags.WidthFixed, 45);
                                         ImGui.TableSetupColumn("Part Texture");
                                         ImGui.TableHeadersRow();
-
                                         for (ushort i = 0; i < iNode->PartsList->PartCount; i++) {
                                             ImGui.TableNextColumn();
 
@@ -874,30 +870,18 @@ public unsafe class UIDebug : DebugHelper {
                                             }
 
                                             ImGui.TableNextColumn();
-
-
-
-
                                             var tPart = iNode->PartsList->Parts[i];
+                                            var u = isHighResolution ? tPart.U * 2.0f : tPart.U;
+                                            var v = isHighResolution ? tPart.V * 2.0f : tPart.V;
+                                            var width = isHighResolution ? tPart.Width * 2.0f : tPart.Width;
+                                            var height = isHighResolution ? tPart.Height * 2.0f : tPart.Height;
 
-                                            ImGui.Text($"[U: {tPart.U}  V: {tPart.V}  W: {tPart.Width}  H: {tPart.Height}]");
-
-
-
-
-                                            ImGui.Image(new IntPtr(kernelTexture->D3D11ShaderResourceView), new Vector2(tPart.Width, tPart.Height), new Vector2(tPart.U , tPart.V) / textureSize, new Vector2(tPart.U + tPart.Width, tPart.V + tPart.Height) / textureSize);
-
-
-
+                                            ImGui.Text($"[U: {u}  V: {v}  W: {width}  H: {height}]");
+                                            ImGui.Image(new IntPtr(kernelTexture->D3D11ShaderResourceView), new Vector2(width, height), new Vector2(u , v) / textureSize, new Vector2(u + width, v + height) / textureSize);
                                         }
                                         ImGui.EndTable();
-
-
-
                                         ImGui.TreePop();
                                     }
-
-
                                     ImGui.TreePop();
                                 }
                             } else if (texType == TextureType.KernelTexture) {
@@ -1107,7 +1091,7 @@ public unsafe class UIDebug : DebugHelper {
             $"Width: {node->Width} Height: {node->Height} " +
             $"OriginX: {node->OriginX} OriginY: {node->OriginY} " +
             $"Priority: {node->Priority}, Depth: {node->Depth}/{node->Depth_2} " +
-            $"Flags: {node->NodeFlags} / {node->Flags_2:X} " +
+            $"Flags: {node->NodeFlags} / {node->DrawFlags:X} " +
             $"DrawFlags: {node->DrawFlags:X}");
         ImGui.Text(
             $"RGBA: 0x{node->Color.R:X2}{node->Color.G:X2}{node->Color.B:X2}{node->Color.A:X2} " +
@@ -1117,6 +1101,17 @@ public unsafe class UIDebug : DebugHelper {
         var v2 = new Vector2(node->X, node->Y);
         if (ImGui.InputFloat2("Position", ref v2)) {
             node->SetPositionFloat(v2.X, v2.Y);
+        }
+
+        var timeline = node->Timeline;
+        if (timeline != null)
+        {
+            if (ImGui.TreeNode($"Timeline##{(ulong)node:X}"))
+            {
+                DrawAtkTimeline(node, timeline);
+
+                ImGui.TreePop();
+            }
         }
 
         var evt = node->AtkEventManager.Event;
@@ -1160,8 +1155,143 @@ public unsafe class UIDebug : DebugHelper {
             }
         }
 
-
     }
+
+    private static void DrawAtkTimeline(AtkResNode* node, AtkTimeline* timeline)
+    {
+        ImGui.Text(
+                    $"Parent Time: {timeline->ParentFrameTime:0.00} ({(ushort)(timeline->ParentFrameTime * 30)}) " +
+                    $"Frame Time: {timeline->FrameTime:0.00} ({(ushort)(timeline->FrameTime * 30)}) " +
+                    $"Animated Properties: {~timeline->Mask} Mask2: {timeline->Flags}");
+
+        if (timeline->ActiveAnimation != null)
+            DrawAtkAnimation("Active Animation", node, timeline->ActiveAnimation);
+
+        ImGui.Text(
+            $"Active Label Id: {timeline->ActiveLabelId} " +
+            $"Duration: {timeline->LabelFrameIdxDuration} " +
+            $"End Idx: {timeline->LabelEndFrameIdx}");
+
+        if (timeline->Resource != null)
+            DrawAtkTimelineResource("Resource:", node, timeline->Resource);
+
+        if (timeline->LabelResource != null)
+            DrawAtkTimelineResource("Label Resource:", node, timeline->LabelResource);
+    }
+
+    private static void DrawAtkTimelineResource(string name, AtkResNode* node, AtkTimelineResource* data)
+    {
+        ImGui.Text(
+                $"Id: {data->Id}");
+
+        if (ImGui.TreeNode($"{name} {data->AnimationCount} Animations##{(ulong)node:X}"))
+        {
+            if (data->Animations != null)
+            {
+                for (var i = 0; i < data->AnimationCount; ++i)
+                    DrawAtkAnimation($"Anim {i}", node, &data->Animations[i]);
+            }
+            else
+                ImGui.Text("Entries are null");
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNode($"{name} {data->LabelSetCount} Label Datas##{(ulong)node:X}"))
+        {
+            if (data->LabelSets != null)
+            {
+                for (var i = 0; i < data->LabelSetCount; ++i)
+                    DrawAtkLabelAnimation($"Label {i}", node, &data->LabelSets[i]);
+            }
+            else
+                ImGui.Text("Entries are null");
+            ImGui.TreePop();
+        }
+    }
+
+    private static void DrawAtkAnimation(string name, AtkResNode* node, AtkTimelineAnimation* anim)
+    {
+        if (ImGui.TreeNode($"{name}({anim->StartFrameIdx} -> {anim->EndFrameIdx})##{(ulong)node:X}_{(ulong)anim:X}"))
+        {
+            ImGui.Text(
+                $"Start: {anim->StartFrameIdx} " +
+                $"End: {anim->EndFrameIdx}");
+            var props = new Span<AtkTimelineKeyGroup>(Unsafe.AsPointer(ref anim->KeyGroups[0]), 8);
+            var k = 0;
+            foreach (var prop in props)
+            {
+                DrawAtkTimelineKeyGroup(FormatTimelineKeyGroupId(node->Type, k), node, &prop);
+                k++;
+            }
+            ImGui.TreePop();
+        }
+    }
+
+    private static void DrawAtkLabelAnimation(string name, AtkResNode* node, AtkTimelineLabelSet* anim)
+    {
+        if (ImGui.TreeNode($"{name}({anim->StartFrameIdx} -> {anim->EndFrameIdx})##{(ulong)node:X}_{(ulong)anim:X}"))
+        {
+            ImGui.Text(
+                $"Start: {anim->StartFrameIdx} " +
+                $"End: {anim->EndFrameIdx}");
+            DrawAtkTimelineKeyGroup(FormatTimelineKeyGroupId(node->Type, 7), node, &anim->LabelKeyGroup);
+            ImGui.TreePop();
+        }
+    }
+
+    private static void DrawAtkTimelineKeyGroup(string name, AtkResNode* node, AtkTimelineKeyGroup* prop)
+    {
+        if (prop->Type != AtkTimelineKeyGroupType.None)
+        {
+            if (ImGui.TreeNode($"{name} - {prop->KeyFrameCount} Keyframes of {prop->Type}##{(ulong)node:X}_{(ulong)prop:X}"))
+            {
+                for (var keyframeIdx = 0; keyframeIdx < prop->KeyFrameCount; ++keyframeIdx)
+                {
+                    ref var keyframe = ref prop->KeyFrames[keyframeIdx];
+                    ImGui.Text(
+                        $"Frame: {keyframe.FrameIdx} " +
+                        $"Interpolation: {keyframe.Interpolation} " +
+                        $"({keyframe.SpeedCoefficient1:0.##}, {keyframe.SpeedCoefficient2:0.##})");
+                    ref var v = ref keyframe.Value;
+                    ImGui.Text("Value: " + prop->Type switch
+                    {
+                        AtkTimelineKeyGroupType.Float2 => $"({v.Float2.Item1}, {v.Float2.Item2})",
+                        AtkTimelineKeyGroupType.Float => $"{v.Float}",
+                        AtkTimelineKeyGroupType.Byte => $"{v.Byte}",
+                        AtkTimelineKeyGroupType.NodeTint => $"Multiply: ({v.NodeTint.MultiplyRGB.R}, {v.NodeTint.MultiplyRGB.G}, {v.NodeTint.MultiplyRGB.B}) " +
+                                                      $"Add: ({v.NodeTint.AddR}, {v.NodeTint.AddG}, {v.NodeTint.AddB})",
+                        AtkTimelineKeyGroupType.UShort => $"{v.UShort}",
+                        AtkTimelineKeyGroupType.RGB => $"({v.RGB.R}, {v.RGB.G}, {v.RGB.B})",
+                        AtkTimelineKeyGroupType.Label => $"{v.Label.JumpBehavior}: {v.Label.LabelId}, {v.Label.JumpLabelId}",
+                        _ => $"Unknown (0x{*(ulong*)Unsafe.AsPointer(ref v):X8})",
+                    });
+                }
+                ImGui.TreePop();
+            }
+        }
+    }
+
+    private static string FormatTimelineKeyGroupId(NodeType nodeType, int propIdx) =>
+        propIdx switch
+        {
+            0 => "Positon",
+            1 => "Rotation",
+            2 => "Scale",
+            3 => "Alpha",
+            4 => "Add/Multiply RGB",
+            5 => nodeType switch {
+                    NodeType.Image or NodeType.NineGrid => "Part ID",
+                    NodeType.Text => "Text Color",
+                    _ => "Node Specific"
+                },
+            6 => nodeType switch
+            {
+                NodeType.Text => "Edge Color",
+                _ => "Node Specific"
+            },
+            7 => "Active Label",
+            _ => "Undefined"
+        } + $" ({propIdx})";
 
 
     private bool doingSearch;
@@ -1200,8 +1330,6 @@ public unsafe class UIDebug : DebugHelper {
             selectedInList[i] = false;
             var unitManager = &unitManagers[i];
 
-            var unitBaseArray = &(unitManager->AtkUnitEntries);
-
             var headerOpen = true;
                 
             if (!searching) {
@@ -1209,9 +1337,9 @@ public unsafe class UIDebug : DebugHelper {
                 headerDrawn = true;
                 noResults = false;
             }
-                
-            for (var j = 0; j < unitManager->Count && headerOpen; j++) {
-                var unitBase = unitBaseArray[j];
+            foreach (var j in Enumerable.Range(0, Math.Min(unitManager->Count, unitManager->EntriesSpan.Length))) {
+                var unitBase = unitManager->EntriesSpan[j].Value;
+                if (unitBase == null) continue;
                 if (selectedUnitBase != null && unitBase == selectedUnitBase) {
                     selectedInList[i] = true;
                     foundSelected = true;
@@ -1247,8 +1375,9 @@ public unsafe class UIDebug : DebugHelper {
             }
                 
             if (selectedInList[i] == false && selectedUnitBase != null) {
-                for (var j = 0; j < unitManager->Count; j++) {
-                    if (selectedUnitBase == null || unitBaseArray[j] != selectedUnitBase) continue;
+                foreach (var j in Enumerable.Range(0, Math.Min(unitManager->Count, unitManager->EntriesSpan.Length))) {
+                    var unitBase = unitManager->EntriesSpan[j].Value;
+                    if (selectedUnitBase == null || unitBase != selectedUnitBase) continue;
                     selectedInList[i] = true;
                     foundSelected = true;
                 }
@@ -1311,7 +1440,7 @@ public unsafe class UIDebug : DebugHelper {
             
         var nodeVisible = GetNodeVisible(node);
         position += ImGui.GetMainViewport().Pos;
-        ImGui.GetForegroundDrawList().AddRect(position, position + size, nodeVisible ? 0xFF00FF00 : 0xFF0000FF);
+        ImGui.GetForegroundDrawList(ImGuiHelpers.MainViewport).AddRect(position, position + size, nodeVisible ? 0xFF00FF00 : 0xFF0000FF);
     }
 
     private class NodeState {

@@ -7,8 +7,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using Dalamud.Interface;
 using Dalamud.Interface.Colors;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using ImGuiNET;
 using SimpleTweaksPlugin.TweakSystem;
@@ -19,7 +19,7 @@ public class ChangelogEntry {
     public BaseTweak? Tweak { get; }
     public TweakProvider? TweakProvider { get; }
     public Version Version { get; }
-    public string Change { get; } = string.Empty;
+    public string Change { get; private set; } = string.Empty;
     public bool IsNewTweak { get; }
     public string? ChangeAuthor { get; private set; }
 
@@ -40,6 +40,16 @@ public class ChangelogEntry {
         ChangeAuthor = author;
         return this;
     }
+
+    public ChangelogEntry Sub(string text, int level = 1) {
+        Change += "\n";
+        for (var i = 0; i < level; i++) {
+            Change += "\t";
+        }
+        Change += $" - {text}";
+        return this;
+    }
+    
 }
 
 public class Changelog : Window {
@@ -53,6 +63,17 @@ public class Changelog : Window {
         Add("1.8.6.0", "General fixes for 6.38");
         Add("1.8.7.1", "General fixes for 6.4");
         Add("1.8.9.0", "Added an option to opt out of analytics\n\tNote:\n\t\tNo analytics are currently being collected.\n\t\tThis is a preemptive opt out for the future.");
+        Add("1.8.9.2", "Added preview images to some tweaks.");
+        Add("1.9.0.0", "Tweaks that add commands can now have their commands customized.");
+        Add("1.9.0.0", "The tweak list is now split into more categories")
+            .Sub("Tweaks can be in multiple categories.")
+            .Sub("Categories can be disabled in settings.")
+            .Sub("The 'All Tweaks' pseudo-category displays all available tweaks.", 2)
+            .Sub("The 'Enabled Tweaks' pesudo-category displays only enabled tweaks.", 2);
+        Add("1.9.3.0", "Added optional metrics collection")
+            .Sub("Everyone will be given a chance to opt in or our to the collection of a list of enabled tweaks when first accessing the simple tweaks config window.")
+            .Sub("Anyone who preemptivly opted out will not see the notice as they already made the choice.")
+            .Sub("No information will be collected until the 'Allow collection' button is pressed.");
     }
 
 #if DEBUG || PRIVATE
@@ -133,7 +154,7 @@ public class Changelog : Window {
         return true;
     }
 
-    private static string GenerateChangelogMarkdown(Version changelogVersion = null, StringBuilder stringBuilder = null) {
+    public static string GenerateChangelogMarkdown(Version changelogVersion = null, StringBuilder stringBuilder = null) {
         stringBuilder ??= new StringBuilder();
 
         if (changelogVersion == null) {

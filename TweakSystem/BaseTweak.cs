@@ -7,12 +7,13 @@ using System.Linq;
 using System.Reflection;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
+using Dalamud.Interface.Internal;
+using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using ImGuiNET;
-using ImGuiScene;
-using JetBrains.Annotations;
 using Newtonsoft.Json;
 using SimpleTweaksPlugin.Events;
+using SimpleTweaksPlugin.Tweaks.AbstractTweaks;
 using SimpleTweaksPlugin.Utility;
 
 namespace SimpleTweaksPlugin.TweakSystem; 
@@ -24,9 +25,10 @@ public abstract class BaseTweak {
 
     public virtual bool Ready { get; protected set; }
     public virtual bool Enabled { get; protected set; }
+    protected virtual bool Unloading { get; private set; } = true;
 
     private bool hasPreviewImage;
-    private TextureWrap previewImage;
+    private IDalamudTextureWrap previewImage;
     
     public bool IsDisposed { get; private set; }
 
@@ -34,7 +36,7 @@ public abstract class BaseTweak {
 
     public virtual string Name => TweakNameAttribute?.Name ?? GetType().Name;
 
-    public virtual uint Version => 1;
+    public virtual uint Version => TweakVersionAttribute?.Version ?? 1;
 
     public string LocalizedName => LocString("Name", Name, "Tweak Name");
 
@@ -49,7 +51,7 @@ public abstract class BaseTweak {
 
     public virtual bool CanLoad => true;
 
-    public virtual bool UseAutoConfig => false;
+    public virtual bool UseAutoConfig => TweakAutoConfigAttribute is not NoAutoConfig;
 
     protected CultureInfo Culture => Plugin.Culture;
 
@@ -135,9 +137,49 @@ public abstract class BaseTweak {
             return default;
         }
     }
+    
+    private object LoadConfig(Type T, string key) {
+        if (!T.IsSubclassOf(typeof(TweakConfig))) throw new Exception($"{T} is not a TweakConfig class.");
+        try {
+            var configDirectory = PluginInterface.GetPluginConfigDirectory();
+            var configFile = Path.Combine(configDirectory, key + ".json");
+            if (!File.Exists(configFile)) return default;
+            var jsonString = File.ReadAllText(configFile);
+            return JsonConvert.DeserializeObject(jsonString, T);
+        } catch (Exception ex) {
+            SimpleLog.Error($"Failed to load config for tweak: {Name}");
+            SimpleLog.Error(ex);
+            return null;
+        }
+    }
+    
 
     protected void SaveConfig<T>(T config) where T : TweakConfig {
         try {
+#if DEBUG
+            SimpleLog.Verbose($"Save Config: {Name}");
+#endif
+            var configDirectory = PluginInterface.GetPluginConfigDirectory();
+            var configFile = Path.Combine(configDirectory, this.Key + ".json");
+            var jsonString = JsonConvert.SerializeObject(config, Formatting.Indented);
+#if DEBUG
+            foreach (var l in jsonString.Split('\n')) {
+                SimpleLog.Verbose($"    [{Name} Config] {l}");
+            }
+#endif
+            File.WriteAllText(configFile, jsonString);
+        } catch (Exception ex) {
+            SimpleLog.Error($"Failed to write config for tweak: {this.Name}");
+            SimpleLog.Error(ex);
+        }
+    }
+    
+    private void SaveConfig(object config) {
+        try {
+            if (!config.GetType().IsSubclassOf(typeof(TweakConfig))) {
+                SimpleLog.Error($"Failed to save Config: {config.GetType().Name} is not a subclass of TweakConfig.");
+                return;
+            }
 #if DEBUG
             SimpleLog.Verbose($"Save Config: {Name}");
 #endif
@@ -174,7 +216,7 @@ public abstract class BaseTweak {
         var shouldForceOpenConfig = ForceOpenConfig;
         ForceOpenConfig = false;
         var configTreeOpen = false;
-        if ((UseAutoConfig || DrawConfigTree != null) && Enabled) {
+        if ((this is CommandTweak || UseAutoConfig || DrawConfigTree != null) && (Enabled || this is CommandTweak)) {
             var x = ImGui.GetCursorPosX();
             if (shouldForceOpenConfig) ImGui.SetNextItemOpen(true);
             if (ImGui.TreeNode($"{LocalizedName}##treeConfig_{GetType().Name}")) {
@@ -182,10 +224,14 @@ public abstract class BaseTweak {
                 DrawCommon();
                 ImGui.SetCursorPosX(x);
                 ImGui.BeginGroup();
-                if (UseAutoConfig)
-                    DrawAutoConfig();
-                else 
-                    DrawConfigTree(ref hasChanged);
+                if (Enabled && UseAutoConfig) DrawAutoConfig(ref hasChanged);
+                if (Enabled) DrawConfigTree?.Invoke(ref hasChanged);
+                if (this is CommandTweak ct) {
+                    if (Enabled && (UseAutoConfig || DrawConfigTree != null)) ImGui.Text("Customize Commands:");
+                    using var _ = ImRaii.PushIndent(condition: Enabled && (UseAutoConfig || DrawConfigTree != null));
+                    ct.DrawCommandEditor(false);
+                }
+
                 ImGui.EndGroup();
                 ImGui.TreePop();
             } else {
@@ -208,12 +254,19 @@ public abstract class BaseTweak {
 
     public virtual void LanguageChanged() { }
 
-    private void DrawAutoConfig() {
-        var configChanged = false;
+    private void DrawAutoConfig(ref bool hasChanged) {
         try {
-            // ReSharper disable once PossibleNullReferenceException
-            var configObj = this.GetType().GetProperties().FirstOrDefault(p => p.PropertyType.IsSubclassOf(typeof(TweakConfig))).GetValue(this);
+            var configProperty = this.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).FirstOrDefault(p => p.PropertyType.IsSubclassOf(typeof(TweakConfig)));
+            if (configProperty == null) {
+                ImGui.Text("No Config Property Found");
+                return;
+            }
+            var configObj = configProperty.GetValue(this);
 
+            if (configObj == null) {
+                configObj = Activator.CreateInstance(configProperty.PropertyType);
+                configProperty.SetValue(this, configObj);
+            }
 
             var fields = configObj.GetType().GetFields()
                 .Where(f => f.GetCustomAttribute(typeof(TweakConfigOptionAttribute)) != null)
@@ -239,18 +292,18 @@ public abstract class BaseTweak {
                     var arr = new [] {$"{localizedName}##{f.Name}_{this.GetType().Name}_{configOptionIndex++}", v};
                     var o = (bool) attr.Editor.Invoke(null, arr);
                     if (o) {
-                        configChanged = true;
+                        hasChanged = true;
                         f.SetValue(configObj, arr[1]);
                     }
                 } else if (f.FieldType == typeof(bool)) {
                     var v = (bool) f.GetValue(configObj);
                     if (ImGui.Checkbox($"{localizedName}##{f.Name}_{this.GetType().Name}_{configOptionIndex++}", ref v)) {
-                        configChanged = true;
+                        hasChanged = true;
                         f.SetValue(configObj, v);
                     }
                 } else if (f.FieldType == typeof(int)) {
                     var v = (int) f.GetValue(configObj);
-                    ImGui.SetNextItemWidth(attr.EditorSize == -1 ? -1 : attr.EditorSize * ImGui.GetIO().FontGlobalScale);
+                    if (attr.EditorSize != null) ImGui.SetNextItemWidth(attr.EditorSize == -1 ? -1 : attr.EditorSize * ImGui.GetIO().FontGlobalScale);
                     var e = attr.IntType switch {
                         TweakConfigOptionAttribute.IntEditType.Slider => ImGui.SliderInt($"{localizedName}##{f.Name}_{this.GetType().Name}_{configOptionIndex++}", ref v, attr.IntMin, attr.IntMax),
                         TweakConfigOptionAttribute.IntEditType.Drag => ImGui.DragInt($"{localizedName}##{f.Name}_{this.GetType().Name}_{configOptionIndex++}", ref v, 1f, attr.IntMin, attr.IntMax),
@@ -269,10 +322,27 @@ public abstract class BaseTweak {
                         
                     if (e) {
                         f.SetValue(configObj, v);
-                        configChanged = true;
+                        hasChanged = true;
                     }
-                }
-                else {
+                } else if (f.FieldType.IsEnum) {
+                    var v = (Enum)f.GetValue(configObj);
+
+                    if (attr.EditorSize != int.MinValue) ImGui.SetNextItemWidth(attr.EditorSize == -1 ? -1 : attr.EditorSize * ImGui.GetIO().FontGlobalScale);
+                    
+                    if (ImGui.BeginCombo($"{localizedName}##{f.Name}_{this.GetType().Namespace}_{configOptionIndex++}", $"{v.GetDescription()}")) {
+                        foreach (var eV in f.FieldType.GetEnumValues()) {
+                            if (eV is not Enum enumValue) {
+                                ImGui.Selectable($"???{eV}");
+                                continue;
+                            }
+                            if (ImGui.Selectable($"{enumValue.GetDescription()}", v.Equals(enumValue))) {
+                                f.SetValue(configObj, enumValue);
+                            }
+                        }
+
+                        ImGui.EndCombo();
+                    }
+                } else {
                     ImGui.Text($"Invalid Auto Field Type: {f.Name}");
                 }
 
@@ -281,10 +351,6 @@ public abstract class BaseTweak {
         } catch (Exception ex) {
             ImGui.Text($"Error with AutoConfig: {ex.Message}");
             ImGui.TextWrapped($"{ex.StackTrace}");
-        }
-
-        if (configChanged && Enabled) {
-            ConfigChanged();
         }
     }
 
@@ -380,8 +446,52 @@ public abstract class BaseTweak {
     }
 
     protected delegate void DrawConfigDelegate(ref bool hasChanged);
-    protected virtual DrawConfigDelegate DrawConfigTree => null;
+    protected virtual DrawConfigDelegate DrawConfigTree { get; private set; }
+
+
+    private void AttemptDrawConfigSetup() {
+        if (DrawConfigTree != null) return;
         
+        var method = GetType().GetMethod("DrawConfig", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (method == null) return;
+
+        if (method.ReturnType != typeof(void)) {
+            Plugin.Error(this, new Exception("Failed to set DrawConfig function. Return type not void."), true);
+            return;
+        }
+        
+        var parameters = method.GetParameters();
+
+        if (parameters.Length == 0) {
+
+            DrawConfigTree = (ref bool changed) => {
+                method.Invoke(this, null);
+            };
+            return;
+
+        }
+        
+        if (parameters.Length == 1) {
+            var param = parameters[0];
+
+            if (param.ParameterType.IsByRef) {
+                var refType = param.ParameterType.GetElementType();
+
+                if (refType == typeof(bool)) {
+                    DrawConfigTree = (ref bool changed) => {
+                        var o = new object[] { changed };
+                        method.Invoke(this, o);
+                        changed = (bool)o[0];
+                    };
+                    return;
+                }
+            }
+
+        } 
+        
+        Plugin.Error(this, new Exception("Failed to set DrawConfig function. Invalid parameters."), true);
+    }
+    
     public virtual void Setup() {
         hasPreviewImage = File.Exists(Path.Join(PluginInterface.AssemblyLocation.DirectoryName, "TweakPreviews", $"{Key}.png"));
 
@@ -394,18 +504,55 @@ public abstract class BaseTweak {
                 AddChangelog(c.Version, change).Author(c.Author);
             }
         }
-        
-        
+
+        AttemptDrawConfigSetup();
         Ready = true;
     }
 
-    private bool signatureHelperInitalized = false;
+    private bool signatureHelperInitialized = false;
+
+    private void AutoLoadConfig() {
+        SimpleLog.Verbose($"[{Key}] AutoLoading Config");
+        var configProperty = GetType().GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).FirstOrDefault(p => p.PropertyType.IsSubclassOf(typeof(TweakConfig)));
+        if (configProperty == null) {
+            SimpleLog.Error("Failed to AutoLoad config. No TweakConfig property found.");
+            return;
+        }
+
+        var config = LoadConfig(configProperty.PropertyType, TweakAutoConfigAttribute.ConfigKey ?? Key);
+        if (config == null) {
+            config = Activator.CreateInstance(configProperty.PropertyType);
+            configProperty.SetValue(this, config);
+        } else {
+            configProperty.SetValue(this, config);
+        }
+    }
+
+    private void AutoSaveConfig() {
+        SimpleLog.Verbose($"[{Key}] AutoSaving Config");
+        var configProperty = GetType().GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).FirstOrDefault(p => p.PropertyType.IsSubclassOf(typeof(TweakConfig)));
+        if (configProperty == null) {
+            SimpleLog.Error("Failed to AutoSave config. No TweakConfig property found.");
+            return;
+        }
+        var config = configProperty.GetValue(this);
+        if (config == null) return;
+        SaveConfig(config);
+    }
+    
+    
     internal void InternalEnable() {
-        if (!signatureHelperInitalized) {
+        Unloading = false;
+        if (!signatureHelperInitialized) {
             SignatureHelper.Initialise(this);
-            signatureHelperInitalized = true;
+            signatureHelperInitialized = true;
         }
         
+        // Auto Load Config
+        if (UseAutoConfig && TweakAutoConfigAttribute is not NoAutoConfig && TweakAutoConfigAttribute.AutoSaveLoad) {
+           AutoLoadConfig(); 
+        }
+
         Enable();
         EventController.RegisterEvents(this);
         
@@ -425,6 +572,7 @@ public abstract class BaseTweak {
     }
 
     internal void InternalDisable() {
+        Unloading = true;
         Disable();
         EventController.UnregisterEvents(this);
 
@@ -433,6 +581,11 @@ public abstract class BaseTweak {
             if (field.GetValue(this) is IHookWrapper h) {
                 h.Disable();
             }
+        }
+
+        // Auto Save Config
+        if (UseAutoConfig && TweakAutoConfigAttribute is not NoAutoConfig && TweakAutoConfigAttribute.AutoSaveLoad) {
+            AutoSaveConfig(); 
         }
         Enabled = false;
     }
@@ -490,7 +643,49 @@ public abstract class BaseTweak {
         }
     }
 
+    private TweakVersionAttribute tweakVersionAttribute;
+    protected TweakVersionAttribute TweakVersionAttribute {
+        get {
+            if (tweakVersionAttribute != null) return tweakVersionAttribute;
+            tweakVersionAttribute = GetType().GetCustomAttribute<TweakVersionAttribute>() ?? new TweakVersionAttribute(1);
+            return tweakVersionAttribute;
+        }
+    }
 
+    private TweakAutoConfigAttribute tweakAutoConfigAttribute;
+
+    protected TweakAutoConfigAttribute TweakAutoConfigAttribute {
+        get {
+            if (tweakAutoConfigAttribute != null) return tweakAutoConfigAttribute;
+            tweakAutoConfigAttribute = GetType().GetCustomAttribute<TweakAutoConfigAttribute>() ?? NoAutoConfig.Singleton;
+            return tweakAutoConfigAttribute;
+        }
+    }
+
+    private HashSet<string> categories;
+    public HashSet<string> Categories {
+        get {
+            if (categories != null) return categories;
+
+            void HandleAttributes(IEnumerable<TweakCategoryAttribute> attributes) {
+                categories = new HashSet<string>();
+                foreach (var attr in attributes) {
+                    foreach (var v in attr.Categories) {
+                        categories.Add(v);
+                    }
+                }
+            }
+            
+            HandleAttributes(GetType().GetCustomAttributes<TweakCategoryAttribute>(true));
+            foreach (var i in GetType().GetInterfaces()) {
+                HandleAttributes(i.GetCustomAttributes<TweakCategoryAttribute>(true));
+            }
+
+            if (Experimental) categories.Add($"{TweakCategory.Experimental}");
+            
+            return categories;
+        }
+    }
     #endregion
     
 
